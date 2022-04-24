@@ -1,0 +1,4 @@
+2022-04-24 22:47:54,886 : INFO : main : Welcome to our final project in video processing
+2022-04-24 22:47:54,886 : DEBUG : main : Creating time dictionary
+2022-04-24 22:47:54,886 : DEBUG : main : Running video stabilization. input path : ../Inputs/INPUT.avi
+2022-04-24 22:47:54,886 : DEBUG : main : video stabilization has been finished. Running time : 0.0 seconds
