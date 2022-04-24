@@ -2,12 +2,7 @@ import logging
 import project_constants
 import time
 from video_stabilization import stabilize_video
-
-
-def create_time_dictionary():
-    time_dictionary = {}.fromkeys(['time_to_stabilize', 'time_to_binary', 'time_to_alpha', 'time_to_matted',
-                                   'time_to_output'], None)
-    return time_dictionary
+import project_utils
 
 
 def create_logger():
@@ -24,7 +19,7 @@ def main():
 
     "create time dictionary"
     logger.debug("Creating time dictionary")
-    time_dictionary = create_time_dictionary()
+    time_dictionary = project_utils.create_time_dictionary()
 
     "video stabilization"
     logger.debug("Running video stabilization. input path : " + project_constants.INPUT_VIDEO_PATH)
