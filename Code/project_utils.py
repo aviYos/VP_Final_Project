@@ -1,6 +1,9 @@
 import logging
 import project_constants
 
+ID1 = 315488171
+ID2 = 314756297
+
 
 def create_time_dictionary():
     time_dictionary = {}.fromkeys(['time_to_stabilize', 'time_to_binary', 'time_to_alpha', 'time_to_matted',

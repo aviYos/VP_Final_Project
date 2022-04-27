@@ -1,0 +1,19 @@
+2022-04-27 20:11:42,732 : INFO : main : Welcome to our final project in video processing
+2022-04-27 20:11:42,733 : DEBUG : main : Creating time dictionary
+2022-04-27 20:11:42,733 : DEBUG : main : Running video stabilization. input path : ../Inputs/INPUT.avi
+2022-04-27 20:11:44,382 : DEBUG : main : video stabilization has been finished. Running time : 1.6488382816314697 seconds
+2022-04-27 20:12:31,335 : INFO : main : Welcome to our final project in video processing
+2022-04-27 20:12:31,335 : DEBUG : main : Creating time dictionary
+2022-04-27 20:12:31,335 : DEBUG : main : Running video stabilization. input path : ../Inputs/INPUT.avi
+2022-04-27 20:14:08,540 : INFO : main : Welcome to our final project in video processing
+2022-04-27 20:14:08,542 : DEBUG : main : Creating time dictionary
+2022-04-27 20:14:08,542 : DEBUG : main : Running video stabilization. input path : ../Inputs/INPUT.avi
+2022-04-27 20:48:57,624 : INFO : main : Welcome to our final project in video processing
+2022-04-27 20:48:57,624 : DEBUG : main : Creating time dictionary
+2022-04-27 20:48:57,624 : DEBUG : main : Running video stabilization. input path : ../Inputs/INPUT.avi
+2022-04-27 20:52:04,418 : INFO : main : Welcome to our final project in video processing
+2022-04-27 20:52:04,419 : DEBUG : main : Creating time dictionary
+2022-04-27 20:52:04,419 : DEBUG : main : Running video stabilization. input path : ../Inputs/INPUT.avi
+2022-04-27 20:54:13,555 : INFO : main : Welcome to our final project in video processing
+2022-04-27 20:54:13,555 : DEBUG : main : Creating time dictionary
+2022-04-27 20:54:13,555 : DEBUG : main : Running video stabilization. input path : ../Inputs/INPUT.mp4
