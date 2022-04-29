@@ -6,7 +6,7 @@ ID2 = '314756297'
 
 # File names
 GER_NAME = '../Temp/Final_Project_Logger.log'
-INPUT_VIDEO_PATH = '../Inputs/INPUT.mp4'
+INPUT_VIDEO_PATH = '../Inputs/INPUT.avi'
 STABILIZE_PATH = f'../Outputs/stabilize_{ID1}_{ID2}.avi'
 EXTRACTED_PATH = f'../Outputs/extracted_{ID1}_{ID2}.avi'
 BINARY_PATH = f'../Outputs/binary_{ID1}_{ID2}.avi'
@@ -38,8 +38,8 @@ SMALL_ENOUGH_H = 50
 SMALL_ENOUGH_W = 50
 
 WINDOW_SIZE_TAU = 5
-MAX_ITER_TAU = 5
-NUM_LEVELS_TAU = 5
+MAX_ITER_TAU = 15
+NUM_LEVELS_TAU = 7
 
 # Backgound Subtraction Parameters
 
