@@ -2,10 +2,9 @@ import cv2
 import numpy as np
 import project_constants
 from tqdm import tqdm
-from scipy import signal
+from scipy import signal, ndimage
 from scipy.interpolate import griddata
 from harris_corner_detector import our_harris_corner_detector
-import os
 
 ID1 = 315488171
 ID2 = 314756297
@@ -53,7 +52,8 @@ def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
     for i in range(num_levels):
         previous_level_image = pyramid[i]
         """  convolve the previous_level_image with PYRAMID_FILTER """
-        current_level_image = signal.convolve2d(previous_level_image, project_constants.PYRAMID_FILTER, mode='same', boundary='symm')
+        current_level_image = signal.convolve2d(previous_level_image, project_constants.PYRAMID_FILTER, mode='same',
+                                                boundary='symm')
         """ decimation by 2 """
         current_level_image = current_level_image[::2, ::2]
         pyramid.append(current_level_image)
@@ -141,14 +141,9 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     dimension (the factor for u should take into account the number of columns
     in u and the factor for v should take into account the number of rows in v).
 
-    As for the warping, use `scipy.interpolate`'s `griddata` method. Define the
-    grid-points using a flattened version of the `meshgrid` of 0:w-1 and 0:h-1.
-    The values here are simply image.flattened().
-    The points you wish to interpolate are, again, a flattened version of the
-    `meshgrid` matrices - don't forget to add them v and u.
-    Use `np.nan` as `griddata`'s fill_value.
+    As for the warping, we'll use a different method than scipy's gridddata, which was shown to be much slower.
+    We use cv2's fast implementation of warpPerspective, that performs a perspective transformation.
     Finally, fill the nan holes with the source image values.
-    Hint: For the final step, use np.isnan(image_warp).
 
     Args:
         image: np.ndarray. Image to warp.
@@ -161,15 +156,11 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
 
     h, w = image.shape
 
-    """  calculate normalization factor """
     u_normalization_factor = h / u.shape[0]
     v_normalization_factor = w / v.shape[0]
 
-    """ resize u and v to image size """
     resized_u = cv2.resize(u, image.T.shape) * u_normalization_factor
     resized_v = cv2.resize(v, image.T.shape) * v_normalization_factor
-
-    """ create grid """
 
     x_range = np.linspace(0, w - 1, w)
     y_range = np.linspace(0, h - 1, h)
@@ -179,19 +170,24 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     x_grid = x_grid.flatten()
     y_grid = y_grid.flatten()
 
-    """ image values """
-
-    flattened_image = image.flatten()
-
-    """ create grid + u,v """
-
     grid_x_plus_du = x_grid + resized_u.flatten()
     grid_y_plus_dv = y_grid + resized_v.flatten()
 
-    """ interpolate image """
-
-    interpolated_image = griddata((x_grid, y_grid), flattened_image, (grid_x_plus_du, grid_y_plus_dv), method='cubic',
-                                  fill_value=np.nan)
+    cord = [grid_x_plus_du, grid_y_plus_dv]
+    interpolated_image = ndimage.map_coordinates(image.T, coordinates=cord, order=2, cval=np.nan)
+    # use perspective transformation between the source and destination coordinates
+    # the source are the corners of the original frame (excluding borders of the window)
+    # the destination are the corners after applying transformation
+    # src_corners = [[0, h-1], [0, 0], [w-1, h-1], [w-1, 0]]
+    # dst_corners = [[resized_u[h-1, 0], h+resized_v[h-1, 0]], [resized_u[0, 0], resized_v[0, 0]],
+    #                       [w+resized_u[h-1, w-1], h+resized_v[h-1, w-1]], [w+resized_u[0,w-1], resized_v[0,w-1]]]
+    # transform_mat = cv2.getPerspectiveTransform(src_corners, dst_corners)
+    # warp the image using cubic interpolation on the perspective transformation matrix
+    # interpolated_image = cv2.warpPerspective(image, transform_mat,
+    #                                      (image.shape[1], image.shape[0]),
+    #                                      flags=2, borderMode=0, borderValue=np.nan)
+    # interpolated_image = griddata((x_grid, y_grid), flattened_image, (grid_x_plus_du, grid_y_plus_dv), method='linear',
+    #                              fill_value=np.nan)
 
     """ resize interpolated image  """
 
@@ -204,6 +200,7 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
 
     image_warp = interpolated_image_original_size
 
+    # image_warp = interpolated_image
     return image_warp
 
 
@@ -290,7 +287,7 @@ def count_frames_manual(cap):
     return total
 
 
-def our_find_image_corner_pixels(I2: np.ndarray, k: float, threshold:float) -> list[tuple[np.ndarray, np.ndarray]]:
+def our_find_image_corner_pixels(I2: np.ndarray, k: float, threshold: float) -> list[tuple[np.ndarray, np.ndarray]]:
     I2_corners = our_harris_corner_detector(I2, k, threshold)
     corners = np.where(I2_corners == 1)
     corner_pixels = list(zip(corners[1], corners[0]))
@@ -426,13 +423,14 @@ def faster_lucas_kanade_optical_flow(
     return u, v
 
 
-def crop_image(frame: np.ndarray, start_rows: int, end_rows: int, start_cols : int, end_cols: int) -> np.ndarray:
+def crop_image(frame: np.ndarray, start_rows: int, end_rows: int, start_cols: int, end_cols: int) -> np.ndarray:
     h, w = frame.shape
     start_rows = min(h, start_rows)
     start_cols = min(w, start_cols)
     end_rows = min(h, end_rows)
     end_cols = min(w, end_cols)
-    return frame[start_rows:h-end_rows, start_cols:w-end_cols]
+    return frame[start_rows:h - end_rows, start_cols:w - end_cols]
+
 
 def stabilize_video(
         input_video_path: str, output_video_path: str, window_size: int,
@@ -487,7 +485,6 @@ def stabilize_video(
             prev_v = v
 
             prev_frame = gray_frame
-            isFirstFrame = False
         else:
             if gray_frame.shape != size:
                 gray_frame = cv2.resize(gray_frame, size)
@@ -512,25 +509,26 @@ def stabilize_video(
             prev_frame = gray_frame
 
         # unlike in HW2, we perform the warp on each RGB channel separately and then merge between them
-        (b, g, r) = cv2.split(frame)
-        b = warp_image(b, u, v)
-        b = crop_image(b, start_rows, end_rows, start_cols, end_cols)
-        if b.shape != size:
-            b = cv2.resize(b, size)
-        g = warp_image(g, u, v)
-        g = crop_image(g, start_rows, end_rows, start_cols, end_cols)
-        if g.shape != size:
-            g = cv2.resize(g, size)
-        r = warp_image(r, u, v)
-        r = crop_image(r, start_rows, end_rows, start_cols, end_cols)
-        if r.shape != size:
-            r = cv2.resize(r, size)
-        frame = cv2.merge([b, g, r])
+        if not isFirstFrame:
+            (b, g, r) = cv2.split(frame)
+            b = warp_image(b, u, v)
+            b = crop_image(b, start_rows, end_rows, start_cols, end_cols)
+            if b.shape != size:
+                b = cv2.resize(b, size)
+            g = warp_image(g, u, v)
+            g = crop_image(g, start_rows, end_rows, start_cols, end_cols)
+            if g.shape != size:
+                g = cv2.resize(g, size)
+            r = warp_image(r, u, v)
+            r = crop_image(r, start_rows, end_rows, start_cols, end_cols)
+            if r.shape != size:
+                r = cv2.resize(r, size)
+            frame = cv2.merge([b, g, r])
+        else:
+            isFirstFrame = False
         out.write(np.uint8(frame))
         pbar.update(1)
         frame_num = frame_num + 1
-        if frame_num == 2:
-            break
         if cv2.waitKey(1) == ord('q'):
             break
 
