@@ -40,3 +40,8 @@ SMALL_ENOUGH_W = 50
 WINDOW_SIZE_TAU = 5
 MAX_ITER_TAU = 5
 NUM_LEVELS_TAU = 5
+
+# Backgound Subtraction Parameters
+
+Background_Subtraction_Alpha = 0.9
+Background_Subtraction_T = 0.8
