@@ -3,8 +3,6 @@ import numpy as np
 import project_constants
 from tqdm import tqdm
 from scipy import signal, ndimage
-from scipy.interpolate import griddata
-from harris_corner_detector import our_harris_corner_detector
 
 ID1 = 315488171
 ID2 = 314756297
@@ -174,20 +172,7 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     grid_y_plus_dv = y_grid + resized_v.flatten()
 
     cord = [grid_x_plus_du, grid_y_plus_dv]
-    interpolated_image = ndimage.map_coordinates(image.T, coordinates=cord, order=2, cval=np.nan)
-    # use perspective transformation between the source and destination coordinates
-    # the source are the corners of the original frame (excluding borders of the window)
-    # the destination are the corners after applying transformation
-    # src_corners = [[0, h-1], [0, 0], [w-1, h-1], [w-1, 0]]
-    # dst_corners = [[resized_u[h-1, 0], h+resized_v[h-1, 0]], [resized_u[0, 0], resized_v[0, 0]],
-    #                       [w+resized_u[h-1, w-1], h+resized_v[h-1, w-1]], [w+resized_u[0,w-1], resized_v[0,w-1]]]
-    # transform_mat = cv2.getPerspectiveTransform(src_corners, dst_corners)
-    # warp the image using cubic interpolation on the perspective transformation matrix
-    # interpolated_image = cv2.warpPerspective(image, transform_mat,
-    #                                      (image.shape[1], image.shape[0]),
-    #                                      flags=2, borderMode=0, borderValue=np.nan)
-    # interpolated_image = griddata((x_grid, y_grid), flattened_image, (grid_x_plus_du, grid_y_plus_dv), method='linear',
-    #                              fill_value=np.nan)
+    interpolated_image = ndimage.map_coordinates(image.T, coordinates=cord, order=4, cval=np.nan)
 
     """ resize interpolated image  """
 
@@ -200,7 +185,6 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
 
     image_warp = interpolated_image_original_size
 
-    # image_warp = interpolated_image
     return image_warp
 
 
@@ -287,27 +271,26 @@ def count_frames_manual(cap):
     return total
 
 
-def our_find_image_corner_pixels(I2: np.ndarray, k: float, threshold: float) -> list[tuple[np.ndarray, np.ndarray]]:
-    I2_corners = our_harris_corner_detector(I2, k, threshold)
-    corners = np.where(I2_corners == 1)
-    corner_pixels = list(zip(corners[1], corners[0]))
-    return corner_pixels
-
-
-def find_image_corner_pixels(I2: np.ndarray, window_size: int, apertureSize: int, k: float) \
+def find_image_corner_pixels(I2: np.ndarray, window_size: int, k: float) \
         -> list[tuple[np.ndarray, np.ndarray]]:
-    I2_corners = cv2.cornerHarris(np.float32(I2), window_size, apertureSize, k)
-    # Results are marked through the dilated corners
-    dst = cv2.dilate(I2_corners, None)
-    corners_logical_mask = dst > 0.001 * dst.max()
-    indices = np.where(corners_logical_mask == True)
-    corner_pixels = list(zip(indices[0], indices[1]))
-    return corner_pixels
+    border_size = int(window_size/2)
+    h, w = I2.shape
+    edge_mask = np.ones((h, w), dtype=np.uint8)
+    top_left = (h-border_size, border_size)
+    bottom_right = (border_size, w-border_size)
+    cv2.rectangle(edge_mask, top_left, bottom_right, 0, cv2.FILLED)
+    corner_pixels = cv2.goodFeaturesToTrack(np.float32(I2), mask=edge_mask, maxCorners=project_constants.MAX_CORNERS,
+                                            blockSize=window_size, qualityLevel=project_constants.QUALITY_LEVEL, k=k,
+                                            minDistance=project_constants.MIN_DISTANCE)
+    corners = []
+    for corner_group in corner_pixels:
+        corners.append((corner_group[0][0], corner_group[0][1]))
+    return corners
 
 
 def faster_lucas_kanade_step(I1: np.ndarray,
                              I2: np.ndarray,
-                             window_size: int, threshold: float, k: float) -> tuple[np.ndarray, np.ndarray]:
+                             window_size: int, k: float) -> tuple[np.ndarray, np.ndarray]:
     """Faster implementation of a single Lucas-Kanade Step.
 
     (1) If the image is small enough (you need to design what is good
@@ -336,8 +319,7 @@ def faster_lucas_kanade_step(I1: np.ndarray,
 
     # find corners in I2
 
-    I2_corners = our_find_image_corner_pixels(I2, threshold=threshold, k=k)
-    # I2_corners = find_image_corner_pixels(I2, window_size, apertureSize=threshold, k=k)
+    I2_corners = find_image_corner_pixels(I2, window_size, k=k)
 
     Ix = signal.convolve2d(I2, project_constants.X_DERIVATIVE_FILTER, mode='same')
     Iy = signal.convolve2d(I2, project_constants.Y_DERIVATIVE_FILTER, mode='same')
@@ -345,13 +327,12 @@ def faster_lucas_kanade_step(I1: np.ndarray,
 
     du = np.zeros(I1.shape)
     dv = np.zeros(I1.shape)
-
     """ ignore window size / 2 pixels"""
     border_index = int(window_size / 2)
 
     for corner_pixel in I2_corners:
 
-        i, j = corner_pixel[0], corner_pixel[1]
+        i, j = int(corner_pixel[1]), int(corner_pixel[0])
 
         Ix_vec = Ix[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1].flatten()
         Iy_vec = Iy[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1].flatten()
@@ -410,8 +391,7 @@ def faster_lucas_kanade_optical_flow(
         warped_I2 = warp_image(pyramid_I2[level_index], u, v)
 
         for iter_idx in range(max_iter):
-            du, dv = faster_lucas_kanade_step(pyramid_I1[level_index], warped_I2, window_size,
-                                              project_constants.THRESHOLD, project_constants.K)
+            du, dv = faster_lucas_kanade_step(pyramid_I1[level_index], warped_I2, window_size, project_constants.K)
             u += du
             v += dv
             warped_I2 = warp_image(pyramid_I2[level_index], u, v)

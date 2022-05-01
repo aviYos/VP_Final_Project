@@ -16,12 +16,11 @@ OUTPUT_PATH = f'../Outputs/OUTPUT_{ID1}_{ID2}.avi'
 LOGGER_NAME = '../Outputs/timing.json'
 TRACKING_LOOGER = '../Outputs/tracking.json'
 
-# Harris Corner Detector parameters
-TILES_NUM_ROW = 2
-TILES_NUM_COL = 5
-THRESHOLD = 8.3e9
-APERTURE_SIZE = 3
-K = 0.137
+# Corner Detector parameters
+MAX_CORNERS = 40
+MIN_DISTANCE = 2
+QUALITY_LEVEL = 0.1
+K = 0.04  # previously 0.137
 
 # Lucas Kanade Video Stabilization parameters
 PYRAMID_FILTER = 1.0 / 256 * np.array([[1, 4, 6, 4, 1],
@@ -38,8 +37,13 @@ SMALL_ENOUGH_H = 50
 SMALL_ENOUGH_W = 50
 
 WINDOW_SIZE_TAU = 5
-MAX_ITER_TAU = 15
-NUM_LEVELS_TAU = 7
+MAX_ITER_TAU = 5
+NUM_LEVELS_TAU = 5
+
+START_ROWS = 15
+START_COLS = 5
+END_ROWS = 10
+END_COLS = 35
 
 # Backgound Subtraction Parameters
 
