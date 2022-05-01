@@ -1,168 +1,178 @@
 import numpy as np
 import cv2
 import project_constants
-from scipy.stats import multivariate_normal
-
-# initialising T and alpha
-alpha = 0.8
-T = 0.3
+import math
 
 
-class Backgound_Subtraction:
-    def __init__(self, input_video_path, outputs_path):
-        self.alpha = project_constants.Background_Subtraction_Alpha
-        self.T = project_constants.Background_Subtraction_T
-        self.input_video_path = input_video_path
-        self.output_path = outputs_path
+# define the model(pdf)
+def norm_pdf(x, mean, s):
+    return (1 / (np.sqrt(2 * np.pi) * s)) * (np.exp(-0.5 * (((x - mean) / s) ** 2)))
 
-    @staticmethod
-    def norm_pdf(x, mean, sigma):
-        return multivariate_normal.pdf(x, mean=mean, cov=sigma)
 
-    def Run_Background_Subtraction(self):
-        # 3'rd gaussian is most probable and 1'st gaussian is least probable
-        cap = cv2.VideoCapture(self.input_video_path)
-        _, frame = cap.read()
+def normo(omega):
+    s = np.sum(omega, axis=0)
+    omega = omega / s
+    return omega
+
+
+# defining the sort function
+def sort(x, index):
+    x = np.take_along_axis(x, index, axis=0)
+    return x
+
+
+class background_subtractor:
+    def __init__(self, video_path, alpha, T, Theta=2.5):
+
+        self.cap = cv2.VideoCapture(video_path)
+        self.alpha = alpha
+        self.T = T
+        self.Theta = Theta
+
+        _, frame = self.cap.read()
+        # convert RGB frames to grayscale
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # Extract height and width of the frame
+        self.height, self.width = frame.shape
 
-        # getting shape of the frame
-        row, col = frame.shape
+        # initialise sample mean matrix
+        self.mean = np.zeros([3, self.height, self.width], np.float64)
+        self.mean[1, :, :] = frame
 
-        # initialising mean,variance,omega and omega by sigma
-        mean = np.zeros([3, row, col], np.float64)
-        mean[1, :, :] = frame
+        # initialise sample covariance matrix
+        self.var = np.zeros([3, self.height, self.width], np.float64)
+        self.var[:, :, :] = 5
 
-        variance = np.zeros([3, row, col], np.float64)
-        variance[:, :, :] = 400
+        # initialise sample weight matrix
+        self.omega = np.zeros([3, self.height, self.width], np.float64)
+        self.omega[0, :, :], self.omega[1, :, :], self.omega[2, :, :] = 0, 0, 1
 
-        omega = np.zeros([3, row, col], np.float64)
-        omega[0, :, :], omega[1, :, :], omega[2, :, :] = 0, 0, 1
+        # initailise weight/ sigma matrix to sort K gaussians
+        self.omega_by_s = np.zeros([3, self.height, self.width], np.float64)
 
-        omega_by_sigma = np.zeros([3, row, col], np.float64)
+        # initialise background matrix
+        self.background = np.zeros([self.height, self.width], np.uint8)
 
-        # initialising foreground and background
-        foreground = np.zeros([row, col], np.uint8)
-        background = np.zeros([row, col], np.uint8)
+        # initialise s matrix: standard_deviation
+        # initialise v matrix: 2.5 * standard_deviation
+        # initialise Compare_val matrix: Difference of pixel intensity between current frame and mean value
+        self.s = np.zeros([3, self.height, self.width], np.float64)
+        self.v = np.zeros([3, self.height, self.width], np.float64)
+        self.compare_val = np.zeros([3, self.height, self.width], np.float64)
 
-        # converting data type of integers 0 and 255 to uint8 type
-        a = np.uint8([255])
-        b = np.uint8([0])
+        # update negative_variance
+        # update standard_deviation and 2.5 * standard deviation
+        for i in range(3):
+            self.var[i][np.where(self.var[i] < 1)] = 5
+            self.s[i] = np.sqrt(self.var[i])
+            self.v[i] = Theta * self.s[i]
 
-        while cap.isOpened():
-            _, frame = cap.read()
-            frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    def run_background_subtraction(self):
+        while self.cap.isOpened():
+            _, frame = self.cap.read()
+            # convert RGB frmes to grayscale
+            fg = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # converting data type of frame_gray so that different operation with it can be performed
-            frame_gray = frame_gray.astype(np.float64)
+            gauss_match = []
+            gauss_not_match = []
 
-            # Because variance becomes negative after some time because of norm_pdf function so we are converting those indices
-            # values which are near zero to some higher values according to their preferences
-            variance[0][np.where(variance[0] < 1)] = 10
-            variance[1][np.where(variance[1] < 1)] = 5
-            variance[2][np.where(variance[2] < 1)] = 1
+            # converting data type of fg so that different operation with it can be performed
+            fg = fg.astype(np.float64)
+            # Update(xi-uj)
+            # Either_It_matches_2.5(standard_deviation)
+            # Or_it_does not_2.5(standard_deviation)
 
-            # calulating standard deviation
-            sigma1 = np.sqrt(variance[0])
-            sigma2 = np.sqrt(variance[1])
-            sigma3 = np.sqrt(variance[2])
+            for i in range(3):
+                self.compare_val[i] = cv2.absdiff(fg, self.mean[i])
 
-            # getting values for the inequality test to get indexes of fitting indexes
-            compare_val_1 = cv2.absdiff(frame_gray, mean[0])
-            compare_val_2 = cv2.absdiff(frame_gray, mean[1])
-            compare_val_3 = cv2.absdiff(frame_gray, mean[2])
+                # finding self.omega_by_s for ordering of the gaussian
+                self.omega_by_s[i] = self.omega[i] / self.s[i]
 
-            value1 = 2.5 * sigma1
-            value2 = 2.5 * sigma2
-            value3 = 2.5 * sigma3
+                # update indices where there is at least one gaussian match
+                gauss_fit = np.where(self.compare_val[i] <= self.v[i])
+                gauss_match.append(gauss_fit)
 
-            # finding those indexes where values of T are less than most probable gaussian and those where sum of most probale
-            # and medium probable is greater than T and most probable is less than T
-            fore_index1 = np.where(omega[2] > T)
-            fore_index2 = np.where(((omega[2] + omega[1]) > T) & (omega[2] < T))
+                # update indices where there is no gaussian match
+                gauss_not_fit = np.where(self.compare_val[i] > self.v[i])
+                gauss_not_match.append(gauss_not_fit)
 
-            # Finding those indices where a particular pixel values fits at least one of the gaussian
-            gauss_fit_index1 = np.where(compare_val_1 <= value1)
-            gauss_not_fit_index1 = np.where(compare_val_1 > value1)
+            # Consider_the_indices>threshold(Weight_or_combination_of_Weights)
+            # Consider_the_indices<threshold
+            fore_index1 = np.where(self.omega[2] > self.T)
+            fore_index2 = np.where(((self.omega[2] + self.omega[1]) > self.T) & (self.omega[2] < self.T))
 
-            gauss_fit_index2 = np.where(compare_val_2 <= value2)
-            gauss_not_fit_index2 = np.where(compare_val_2 > value2)
-
-            gauss_fit_index3 = np.where(compare_val_3 <= value3)
-            gauss_not_fit_index3 = np.where(compare_val_3 > value3)
-
-            # finding common indices for those indices which satisfy line 70 and 80
-            temp = np.zeros([row, col])
+            y = gauss_match[2]
+            # updating indices where line 104 satisfies (matching definition)
+            temp = np.zeros([self.height, self.width])
             temp[fore_index1] = 1
-            temp[gauss_fit_index3] = temp[gauss_fit_index3] + 1
+            temp[y] = temp[y] + 1
             index3 = np.where(temp == 2)
 
-            # finding com
-            temp = np.zeros([row, col])
+            # updating indices where line 105 satisfies (matching definition)
+            temp = np.zeros([self.height, self.width])
             temp[fore_index2] = 1
-            index = np.where((compare_val_3 <= value3) | (compare_val_2 <= value2))
+            index = np.where((self.compare_val[2] <= self.v[2]) | (self.compare_val[1] <= self.v[1]))
             temp[index] = temp[index] + 1
             index2 = np.where(temp == 2)
 
-            match_index = np.zeros([row, col])
-            match_index[gauss_fit_index1] = 1
-            match_index[gauss_fit_index2] = 1
-            match_index[gauss_fit_index3] = 1
-            not_match_index = np.where(match_index == 0)
+            self.not_match_index = np.zeros([3, self.height, self.width])
+            self.match_index = np.zeros([self.height, self.width])
 
-            # updating variance and mean value of the matched indices of all three gaussians
-            rho = alpha * self.norm_pdf(frame_gray[gauss_fit_index1], mean[0][gauss_fit_index1], sigma1[gauss_fit_index1])
-            constant = rho * ((frame_gray[gauss_fit_index1] - mean[0][gauss_fit_index1]) ** 2)
-            mean[0][gauss_fit_index1] = (1 - rho) * mean[0][gauss_fit_index1] + rho * frame_gray[gauss_fit_index1]
-            variance[0][gauss_fit_index1] = (1 - rho) * variance[0][gauss_fit_index1] + constant
-            omega[0][gauss_fit_index1] = (1 - alpha) * omega[0][gauss_fit_index1] + alpha
-            omega[0][gauss_not_fit_index1] = (1 - alpha) * omega[0][gauss_not_fit_index1]
+            self.match_index[gauss_match[0]] = 1
+            self.match_index[gauss_match[1]] = 1
+            self.match_index[gauss_match[2]] = 1
 
-            rho = alpha * self.norm_pdf(frame_gray[gauss_fit_index2], mean[1][gauss_fit_index2], sigma2[gauss_fit_index2])
-            constant = rho * ((frame_gray[gauss_fit_index2] - mean[1][gauss_fit_index2]) ** 2)
-            mean[1][gauss_fit_index2] = (1 - rho) * mean[1][gauss_fit_index2] + rho * frame_gray[gauss_fit_index2]
-            variance[1][gauss_fit_index2] = (1 - rho) * variance[1][gauss_fit_index2] + rho * constant
-            omega[1][gauss_fit_index2] = (1 - alpha) * omega[1][gauss_fit_index2] + alpha
-            omega[1][gauss_not_fit_index2] = (1 - alpha) * omega[1][gauss_not_fit_index2]
+            self.not_match_index = np.where(self.match_index == 0)
 
-            rho = alpha * self.norm_pdf(frame_gray[gauss_fit_index3], mean[2][gauss_fit_index3], sigma3[gauss_fit_index3])
-            constant = rho * ((frame_gray[gauss_fit_index3] - mean[2][gauss_fit_index3]) ** 2)
-            mean[2][gauss_fit_index3] = (1 - rho) * mean[2][gauss_fit_index3] + rho * frame_gray[gauss_fit_index3]
-            variance[2][gauss_fit_index3] = (1 - rho) * variance[2][gauss_fit_index3] + constant
-            omega[2][gauss_fit_index3] = (1 - alpha) * omega[2][gauss_fit_index3] + alpha
-            omega[2][gauss_not_fit_index3] = (1 - alpha) * omega[2][gauss_not_fit_index3]
+            # Update_parameters for the matched  Gaussians
+            # update mean, covariance and weights
+            # Rho : [0,1], input Learning Rate
 
-            # updating least probable gaussian for those pixel values which do not match any of the gaussian
-            mean[0][not_match_index] = frame_gray[not_match_index]
-            variance[0][not_match_index] = 200
-            omega[0][not_match_index] = 0.1
+            for j in range(3):
+                # update var and mean value of the matched indices of all three gaussians
+                rho = self.alpha * norm_pdf(fg[gauss_match[j]], self.mean[j][gauss_match[j]], self.s[j][gauss_match[j]])
+                constant = rho * ((fg[gauss_match[j]] - self.mean[j][gauss_match[j]]) ** 2)
+                self.mean[j][gauss_match[j]] = (1 - rho) * self.mean[j][gauss_match[j]] + rho * fg[gauss_match[j]]
+                self.var[j][gauss_match[j]] = (1 - rho) * self.var[j][gauss_match[j]] + constant
+                self.omega[j][gauss_match[j]] = (1 - self.alpha) * self.omega[j][gauss_match[j]] + self.alpha
+                self.omega[j][gauss_not_match[j]] = (1 - self.alpha) * self.omega[j][gauss_not_match[j]]
+
+            # update least probable gaussian for those pixel values which do not match any of the gaussian
+            self.mean[0][self.not_match_index] = fg[self.not_match_index]
+            self.var[0][self.not_match_index] = 500
+            self.omega[0][self.not_match_index] = 0.1
 
             # normalise omega
-            sum = np.sum(omega, axis=0)
-            omega = omega / sum
+            self.omega = normo(self.omega)  # normalise omega
 
             # finding omega by sigma for ordering of the gaussian
-            omega_by_sigma[0] = omega[0] / sigma1
-            omega_by_sigma[1] = omega[1] / sigma2
-            omega_by_sigma[2] = omega[2] / sigma3
+            for i in range(2):
+                self.omega_by_s[i] = self.omega[i] / self.s[i]
 
-            # getting index order for sorting omega by sigma
-            index = np.argsort(omega_by_sigma, axis=0)
+            # getting index order for sorting self.omega by s
+            index = np.argsort(self.omega_by_s, axis=0)
 
-            # from that index(line 139) sorting mean,variance and omega
-            mean = np.take_along_axis(mean, index, axis=0)
-            variance = np.take_along_axis(variance, index, axis=0)
-            omega = np.take_along_axis(omega, index, axis=0)
+            # from that index(line 139) sorting self.mean,self.var and self.omega
+            # sorting the mean, variance and Omega
+            self.mean = sort(self.mean, index)
+            self.var = sort(self.var, index)
+            self.omega = sort(self.omega, index)
 
-            # converting data type of frame_gray so that we can use it to perform operations for displaying the image
-            frame_gray = frame_gray.astype(np.uint8)
+            # converting data type of fg so that we can use it to perform operations for displaying the image
+            fg = fg.astype(np.uint8)
 
             # getting background from the index2 and index3
-            background[index2] = frame_gray[index2]
-            background[index3] = frame_gray[index3]
-            cv2.imshow('frame', cv2.subtract(frame_gray, background))
-            cv2.imshow('frame_gray', frame_gray)
+            self.background[index2] = fg[index2]
+            self.background[index3] = fg[index3]
 
+            cv2.imshow('original', fg)
+
+            # background and foreground video
+            cv2.imshow('Background', self.background)
+            cv2.imshow('foreground', cv2.absdiff(fg, self.background))
+            cv2.imshow('original', fg)
             if cv2.waitKey(1) & 0xFF == 27:
                 break
-        cap.release()
+        self.cap.release()
         cv2.destroyAllWindows()
+

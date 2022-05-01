@@ -6,6 +6,7 @@ ID2 = '314756297'
 
 # File names
 GER_NAME = '../Temp/Final_Project_Logger.log'
+SECOND_INPUT_VIDEO_PATH = '../Inputs/443_motorway_with_cars_1.mp4'
 INPUT_VIDEO_PATH = '../Inputs/INPUT.mp4'
 STABILIZE_PATH = f'../Outputs/stabilize_{ID1}_{ID2}.avi'
 EXTRACTED_PATH = f'../Outputs/extracted_{ID1}_{ID2}.avi'
@@ -43,5 +44,6 @@ NUM_LEVELS_TAU = 5
 
 # Backgound Subtraction Parameters
 
-Background_Subtraction_Alpha = 0.9
-Background_Subtraction_T = 0.8
+Background_Subtraction_Alpha = 0.05
+Background_Subtraction_T = 0.9
+Background_Subtraction_Theta = 2.5

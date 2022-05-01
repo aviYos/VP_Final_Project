@@ -23,3 +23,9 @@
 2022-04-28 21:10:53,896 : INFO : main : Welcome to our final project in video processing
 2022-04-28 21:10:53,898 : DEBUG : main : Creating time dictionary
 2022-04-28 21:10:53,898 : DEBUG : main : Running video stabilization. input path : ../Inputs/INPUT.mp4
+2022-05-01 19:27:14,071 : INFO : main : Welcome to our final project in video processing
+2022-05-01 19:27:14,073 : DEBUG : main : Creating time dictionary
+2022-05-01 19:27:14,073 : DEBUG : main : Running video stabilization. input path : ../Inputs/INPUT.mp4
+2022-05-01 19:46:13,400 : INFO : main : Welcome to our final project in video processing
+2022-05-01 19:46:13,400 : DEBUG : main : Creating time dictionary
+2022-05-01 19:46:13,400 : DEBUG : main : Running video stabilization. input path : ../Inputs/INPUT.mp4

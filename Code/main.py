@@ -2,6 +2,8 @@ import project_constants
 import time
 from video_stabilization import stabilize_video
 import project_utils
+from background_subtraction import background_subtractor
+
 import os
 
 ID1 = 315488171
@@ -31,4 +33,8 @@ def main():
 
 
 if __name__ == "__main__":
+    Class = background_subtractor(project_constants.SECOND_INPUT_VIDEO_PATH, project_constants.Background_Subtraction_Alpha,
+                                  project_constants.Background_Subtraction_T,
+                                  project_constants.Background_Subtraction_Theta
+                                  ).run_background_subtraction()
     main()
