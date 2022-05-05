@@ -16,6 +16,7 @@ MATTED_PATH = f'../Outputs/matted_{ID1}_{ID2}.avi'
 OUTPUT_PATH = f'../Outputs/OUTPUT_{ID1}_{ID2}.avi'
 LOGGER_NAME = '../Outputs/timing.json'
 TRACKING_LOOGER = '../Outputs/tracking.json'
+STABILIZED_VIDEO_PATH = '../Inputs/stabilize_315488171_314756297.avi'
 
 # Harris Corner Detector parameters
 TILES_NUM_ROW = 2
@@ -47,3 +48,4 @@ NUM_LEVELS_TAU = 5
 Background_Subtraction_Alpha = 0.05
 Background_Subtraction_T = 0.9
 Background_Subtraction_Theta = 2.5
+Background_Subtraction_Mask_Threshold = 175

@@ -33,7 +33,7 @@ def main():
 
 
 if __name__ == "__main__":
-    Class = background_subtractor(project_constants.SECOND_INPUT_VIDEO_PATH, project_constants.Background_Subtraction_Alpha,
+    Class = background_subtractor(project_constants.STABILIZED_VIDEO_PATH, project_constants.Background_Subtraction_Alpha,
                                   project_constants.Background_Subtraction_T,
                                   project_constants.Background_Subtraction_Theta
                                   ).run_background_subtraction()
