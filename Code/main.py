@@ -11,6 +11,7 @@ ID2 = 314756297
 
 
 def main():
+
     logger = project_utils.create_logger()
     logger.info("Welcome to our final project in video processing")
 
