@@ -7,7 +7,7 @@ DIST_2_THRESHOLD = 300
 KNN_HISTORY = 20
 
 
-class background_subtractor_knn:
+class background_subtractor:
 
     def __init__(self):
         self.knn_subtractor = cv2.createBackgroundSubtractorKNN(KNN_HISTORY, DIST_2_THRESHOLD, detectShadows=False)
@@ -128,8 +128,8 @@ class background_subtractor_knn:
                                      stats[largest_shape, cv2.CC_STAT_WIDTH],  # WIDTH - the col number for the image
                                      stats[largest_shape, cv2.CC_STAT_HEIGHT]])  # the height number(rows) for the image
 
-            blob_center = (int(centroids[largest_shape, 0]), int(centroids[largest_shape, 1]))
-            return mask, rect_indices, blob_center
+            shape_center = (int(centroids[largest_shape, 0]), int(centroids[largest_shape, 1]))
+            return mask, rect_indices, shape_center
 
         except Exception as e:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
@@ -248,5 +248,5 @@ class background_subtractor_knn:
 
 
 if __name__ == "__main__":
-    background_subtractor_handle = background_subtractor_knn()
+    background_subtractor_handle = background_subtractor()
     background_subtractor_handle.main_background_subtraction_module()

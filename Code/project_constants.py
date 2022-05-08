@@ -4,6 +4,10 @@ import numpy as np
 ID1 = '315488171'
 ID2 = '314756297'
 
+# General
+resize_factor = 2.5
+
+
 # File names
 GER_NAME = '../Temp/Final_Project_Logger.log'
 SECOND_INPUT_VIDEO_PATH = '../Inputs/443_motorway_with_cars_1.mp4'
@@ -17,6 +21,9 @@ OUTPUT_PATH = f'../Outputs/OUTPUT_{ID1}_{ID2}.avi'
 LOGGER_NAME = '../Outputs/timing.json'
 TRACKING_LOOGER = '../Outputs/tracking.json'
 STABILIZED_VIDEO_PATH = '../Inputs/stabilize_315488171_314756297.avi'
+BACKGROUND_SCRIBLE_PATH = r'../Temp/bg_scribbles.tiff'
+FOREGROUND_SCRIBLE_PATH = r'../Temp/fg_scribbles.tiff'
+
 
 # Corner Detector parameters
 MAX_CORNERS = 40
@@ -61,3 +68,4 @@ SKIN_SAT_THRESHOLD_UPPER = 140
 SKIN_HUE_threshold = 15
 SKIN_VALUE_threshold = 179
 VALUE_NOISE_THRESHOLD = 190
+SCRIBLE_RED_VALUE = 249
