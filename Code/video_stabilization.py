@@ -49,8 +49,11 @@ def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
     pyramid = [image.copy()]
     for i in range(num_levels):
         previous_level_image = pyramid[i]
-        h, w = previous_level_image.shape
-        current_level_image = cv2.pyrDown(previous_level_image, dstsize=(w // 2, h // 2))
+        """  convolve the previous_level_image with PYRAMID_FILTER """
+        current_level_image = signal.convolve2d(previous_level_image, project_constants.PYRAMID_FILTER,
+                                                mode='same', boundary='symm')
+        """ decimation by 2 """
+        current_level_image = current_level_image[::2, ::2]
         pyramid.append(current_level_image)
     return pyramid
 
@@ -339,29 +342,33 @@ def find_interpolation_matrix(I1: np.ndarray, i: int, j: int, u: np.ndarray, v: 
                           [0, 0, 1],
                           [-3, -3, -2]
                           ])
-        mat_2 = np.array([[I1[(i - 1) + u[i - 1, j - 1], j - 1 + v[i - 1, j - 1]],
-                           I1[(i - 1) + u[i - 1, j + 1], j - 1 + v[i - 1, j + 1]],
-                           Iy[(i - 1) + u[i - 1, j - 1], j - 1 + v[i - 1, j - 1]]],
-                          [I1[i + 1 + u[i + 1, j - 1], j - 1 + v[i + 1, j - 1]],
-                           I1[(i + 1) + u[i + 1, j + 1], j + 1 + v[i + 1, j + 1]],
-                           Iy[i + 1 + u[i + 1, j - 1], j - 1 + v[i + 1, j - 1]]],
-                          [Ix[(i - 1) + u[i - 1, j - 1], j - 1 + v[i - 1, j - 1]],
-                           Ix[(i - 1) + u[i - 1, j + 1], j - 1 + v[i - 1, j + 1]],
-                           Ixy[(i - 1) + u[i - 1, j - 1], j - 1 + v[i - 1, j - 1]]]
+        ip1 = int(i + 1)
+        im1 = int(i - 1)
+        jp1 = int(j + 1)
+        jm1 = int(j - 1)
+        mat_2 = np.array([[I1[int(im1 + u[im1, jm1]), int(jm1 + v[im1, jm1])],
+                           I1[int(im1 + u[im1, jp1]), int(jp1 + v[im1, jp1])],
+                           Iy[int(im1 + u[im1, jm1]), int(jm1 + v[im1, jm1])]],
+                          [I1[int(ip1 + u[ip1, jm1]), int(jm1 + v[ip1, jm1])],
+                           I1[int(ip1 + u[ip1, jp1]), int(jp1 + v[ip1, jp1])],
+                           Iy[int(ip1 + u[ip1, jm1]), int(jm1 + v[ip1, jm1])]],
+                          [Ix[int(im1 + u[im1, jm1]), int(jm1 + v[im1, jm1])],
+                           Ix[int(im1 + u[im1, jp1]), int(jm1 + v[im1, jp1])],
+                           Ixy[int(im1 + u[im1, jm1]), int(jm1 + v[im1, jm1])]]
                           ])
         mat_3 = np.array([[1, 0, -3],
                           [0, 0, 3],
                           [0, 1, -2]])
         m_i = np.dot(np.dot(mat_1, mat_2), mat_3)
     else:
-        n10 = i
-        n12 = i
-        n21 = j
-        n23 = j
-        n20 = j + 1
-        n11 = i + 1
-        n22 = j - 1
-        n13 = i - 1
+        n10 = int(i)
+        n12 = int(i)
+        n21 = int(j)
+        n23 = int(j)
+        n20 = int(j + 1)
+        n11 = int(i + 1)
+        n22 = int(j - 1)
+        n13 = int(i - 1)
         position_matrix = np.array([[1, n10, n20, n10 * n20],
                                     [1, n11, n21, n11 * n21],
                                     [1, n12, n22, n12 * n22],
@@ -376,52 +383,19 @@ def find_interpolation_matrix(I1: np.ndarray, i: int, j: int, u: np.ndarray, v: 
     return m_i
 
 
-# padding for image shifting
-def pad_vector(vector, how, depth, constant_value=0):
-    vect_shape = vector.shape[:2]
-    if (how == 'upper') or (how == 'top'):
-        pp = np.full(shape=(depth, vect_shape[1]), fill_value=constant_value)
-        pv = np.vstack(tup=(pp, vector))
-    elif (how == 'lower') or (how == 'bottom'):
-        pp = np.full(shape=(depth, vect_shape[1]), fill_value=constant_value)
-        pv = np.vstack(tup=(vector, pp))
-    elif (how == 'left'):
-        pp = np.full(shape=(vect_shape[0], depth), fill_value=constant_value)
-        pv = np.hstack(tup=(pp, vector))
-    elif (how == 'right'):
-        pp = np.full(shape=(vect_shape[0], depth), fill_value=constant_value)
-        pv = np.hstack(tup=(vector, pp))
-    else:
-        return vector
-    return pv
-
-
-# shifter algorithm
-def shifter(vect, y, y_):
-    if (y > 0):
-        image_trans = pad_vector(vector=vect, how='lower', depth=y_)
-    elif (y < 0):
-        image_trans = pad_vector(vector=vect, how='upper', depth=y_)
-    else:
-        image_trans = vect
-    return image_trans
-
-
-# image shifter algorithm
-def shift_image(image_src, at):
-    x, y = at
-    x_, y_ = abs(x), abs(y)
-
-    if (x > 0):
-        left_pad = pad_vector(vector=image_src, how='left', depth=x_)
-        image_trans = shifter(vect=left_pad, y=y, y_=y_)
-    elif (x < 0):
-        right_pad = pad_vector(vector=image_src, how='right', depth=x_)
-        image_trans = shifter(vect=right_pad, y=y, y_=y_)
-    else:
-        image_trans = shifter(vect=image_src, y=y, y_=y_)
-
-    return image_trans
+# calculates the change in each iteration by multiplying kernel values with shifted image (sort of convolution)
+def calc_change_mat(m_i: np.ndarray, order: int, i: int, j: int, I1: np.ndarray,
+                    grad_I: np.ndarray, window_size: int) -> np.ndarray:
+    border_index = int(window_size / 2)
+    s = np.zeros((window_size, window_size))
+    # shift image to (k,l) and calculate s
+    curr_grad = grad_I[(i - border_index):(i + border_index + 1), (j - border_index):(j + border_index + 1)]
+    for k in range(order):
+        for l in range(order):
+            curr_I = I1[(i - k - border_index):(i - k + border_index + 1),
+                        (j - l - border_index):(j - l + border_index + 1)]
+            s += np.multiply(np.dot(curr_grad, curr_I), m_i[k, l])
+    return s
 
 
 # Lucas Kanade optical flow algorithm that does not use iterative warping
@@ -475,50 +449,51 @@ def very_fast_lucas_kanade_optical_flow(
         grad_I = cv2.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
         A_stack = []  # LK matrix for each window around corner pixel
         r_stack = []  # offset vector r
-        s_stack = []  # interpolation points s
-        num_corner_pixels = 0
+        num_corners = 0
         this_b = []
+        lim = int(project_constants.INTERPOLATION_ORDER + border_index)
         for corner_pixel in I2_corners:
+            num_corners += 1
             this_b.append(np.zeros((window_size, window_size)))
             i, j = int(corner_pixel[1]), int(corner_pixel[0])
-            if i > warped_I2.shape[0] or j > warped_I2.shape[1]:
+            if (i > warped_I2.shape[0]) or (j > warped_I2.shape[1]):
+                continue
+            if i < lim or j < lim:
                 continue
             Ix_vec = Ix[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1].flatten()
             Iy_vec = Iy[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1].flatten()
             A_stack.append(np.vstack((Ix_vec, Iy_vec)).T)
+            # A_stack.append(np.dot(grad_I[i - border_index:i + border_index + 1, j - border_index:j + border_index +
+            # 1], grad_I[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1].T))
             r_stack.append(-1 * (grad_I[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1]) *
                            warped_I2[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1])
-            s = np.zeros((project_constants.INTERPOLATION_ORDER, project_constants.INTERPOLATION_ORDER))
-            s_len_index = int(project_constants.INTERPOLATION_ORDER / 2)
-            # shift image to (k,l) and calculate s
-            for k in range(project_constants.INTERPOLATION_ORDER):
-                for l in range(project_constants.INTERPOLATION_ORDER):
-                    shifted_image = shift_image(pyramid_I1[level_index], (k, l))
-                    full_s = grad_I * shifted_image
-                    print('shape', full_s.shape, 'i', i, 'j', j)
-                    s += full_s[(i - s_len_index):(i + s_len_index + 1), (j - s_len_index):(j + s_len_index + 1)]
-            s_stack.append(s)
         for iter_idx in range(max_iter):
             du = np.zeros(pyramid_I2[level_index].shape)
             dv = np.zeros(pyramid_I2[level_index].shape)
             corner_ind = 0
             for corner_pixel in I2_corners:
-                if i > warped_I2.shape[0] or j > warped_I2.shape[1]:
-                    continue
+                if corner_ind >= num_corners:
+                    break
                 i, j = int(corner_pixel[1]), int(corner_pixel[0])
+                if (i > warped_I2.shape[0]) or (j > warped_I2.shape[1]):
+                    continue
+                if i < lim or j < lim:
+                    continue
                 A = A_stack[corner_ind]
                 m_i = find_interpolation_matrix(pyramid_I1[level_index], i, j, u, v, Ix_1, Iy_1, Ixy_1,
                                                 order=project_constants.INTERPOLATION_ORDER)
-                next_b = r_stack[corner_ind] + np.dot(m_i, s_stack[corner_ind])
+                change_mat = calc_change_mat(m_i, project_constants.INTERPOLATION_ORDER,
+                                             i, j, pyramid_I1[level_index], grad_I, window_size)
+                next_b = r_stack[corner_ind] + change_mat
                 try:
-                    out_vector = np.dot(np.linalg.inv(np.dot(A.T, A)), np.dot(A.T, this_b[:, corner_ind]))
+                    out_vector = np.dot(np.linalg.inv(np.dot(A.T, A)), np.dot(A.T, this_b[corner_ind].flatten()))
                     du[i, j] = out_vector[0]
                     dv[i, j] = out_vector[1]
                     corner_ind += 1
                 except np.linalg.LinAlgError:
                     corner_ind += 1
                     continue
-                this_b[:, corner_ind] = next_b
+                this_b[corner_ind - 1] = next_b
             u += du
             v += dv
 
