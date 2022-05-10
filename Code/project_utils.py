@@ -21,7 +21,7 @@ def create_logger():
 
 
 def get_video_fps(video_cap_hanlde):
-    return video_cap_hanlde.get(cv2.CAP_PROP_FPS)
+    return int(video_cap_hanlde.get(cv2.CAP_PROP_FPS))
 
 
 def write_frames_to_video(video_full_path, video_fps, frames_to_save, frame_size):

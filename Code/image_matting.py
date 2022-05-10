@@ -4,7 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 import config as cfg
-import time
 from tqdm import tqdm
 import project_constants
 import project_utils
@@ -51,15 +50,15 @@ def inverse_smooth_transform(frame_s, transforms_smooth, i):
 def matting_module():
     transforms_smooth = np.load(cfg.path_to_transformations_list)  # tranforms file from stabilization stage
 
-    binary_vid = cv2.VideoCapture('..\\Outputs\\binary_315488171_314756297.avi')
+    binary_vid = cv2.VideoCapture('..\\Outputs\\binary.avi')
     _, binary_frame = binary_vid.read()  # first frame is not used
 
-    stabilized_vid = cv2.VideoCapture('..\\Outputs\\extracted_315488171_314756297.mp4')
+    stabilized_vid = cv2.VideoCapture('..\\Outputs\\extracted.avi')
     width = int(cv2.VideoCapture.get(stabilized_vid, cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cv2.VideoCapture.get(stabilized_vid, cv2.CAP_PROP_FRAME_HEIGHT))
     frame_count = int(cv2.VideoCapture.get(stabilized_vid, cv2.CAP_PROP_FRAME_COUNT))
     fps_input = int(cv2.VideoCapture.get(stabilized_vid, cv2.CAP_PROP_FPS))
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
     matted = cv2.VideoWriter(cfg.path_to_matted, fourcc, fps_input,
                              (int(width * cfg.resize_factor), int(height * cfg.resize_factor)))
@@ -188,17 +187,10 @@ def matting_module():
 
     matted_frame_1080p = cv2.resize(matted_frame, (int(output_width), int(output_height)))
 
-    # build unstabilized_alpha #
-    unstabilized_alpha = inverse_fix_border(alpha)
-    unstabilized_alpha = inverse_smooth_transform(unstabilized_alpha, transforms_smooth, i=0)
-    unstabilized_alpha_1080p = cv2.resize((normalize_im(unstabilized_alpha) * 255.).astype('uint8'),
-                                          (int(output_width), int(output_height)))
-
     alpha_1080p = cv2.resize((normalize_im(alpha) * 255.).astype('uint8'), (int(output_width), int(output_height)))
 
     matted.write(matted_frame_1080p)
     alpha_vid.write(alpha_1080p)
-    unstabilized_alpha_vid.write(unstabilized_alpha_1080p)
     pbar.update(1)
     #####FIRST FRAME - READ->CONVERT_BGR2HSV->GET_SCRIBBLES->KDE->DISTANCE_MAP->MATTING->WRITE2MATTED.AVI#####
 
@@ -318,32 +310,248 @@ class image_matting:
         self.output_frame_height = int(self.frame_height * project_constants.resize_factor)
         self.alpha_video_writer = None
         self.matted_video_writer = None
+        self.progress_bar = tqdm(total=self.number_of_frames)
+        self.distance_map_radius = project_constants.distance_map_radius
 
     def create_video_writers(self):
+
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
-        self.alpha_video_writer = cv2.VideoWriter(project_constants.ALPHA_PATH, fourcc, self.fps,
-                                                  self.output_frame_width,
-                                                  self.output_frame_height)
+        #self.alpha_video_writer = cv2.VideoWriter(project_constants.ALPHA_PATH, fourcc, self.fps,
+        #                                         self.output_frame_width,
+        #                                         self.output_frame_height)
+        #
+        #self.matted_video_writer = cv2.VideoWriter(project_constants.MATTED_PATH, fourcc, self.fps,
+        #                                         self.output_frame_width,
+        #                                         self.output_frame_height)
 
-        self.matted_video_writer = cv2.VideoWriter(project_constants.MATTED_PATH, fourcc, self.fps,
-                                                   self.output_frame_width,
-                                                   self.output_frame_height)
+        width = int(cv2.VideoCapture.get(self.extracted_video_cap, cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cv2.VideoCapture.get(self.extracted_video_cap, cv2.CAP_PROP_FRAME_HEIGHT))
 
-    def load_scribles(self):
-        foreground_scrible = plt.imread(project_constants.FOREGROUND_SCRIBLE_PATH)
-        background_scrible = plt.imread(project_constants.BACKGROUND_SCRIBLE_PATH)
-        scrible_red_color = project_constants.SCRIBLE_RED_VALUE
-        red_foreground_scrible, green_foreground_scrible, blue_foreground_scrible = cv2.split(foreground_scrible)
-        red_background_scrible, green_background_scrible, blue_background_scrible = cv2.split(background_scrible)
-        return red_foreground_scrible, green_foreground_scrible, blue_foreground_scrible, red_background_scrible, \
-               green_background_scrible, blue_background_scrible
+        self.matted_video_writer = cv2.VideoWriter(cfg.path_to_matted, fourcc, self.fps,
+                                 (int(width * cfg.resize_factor), int(height * cfg.resize_factor)))
+        self.alpha_video_writer = cv2.VideoWriter(cfg.path_to_alpha, fourcc, self.fps,
+                                    (int(width * cfg.resize_factor), int(height * cfg.resize_factor)))
+
+    @staticmethod
+    def create_foreground_background_pixels_map(binary_frame):
+        foreground_logical_matrix = (binary_frame > 150).astype(np.uint8)
+        background_logical_matrix = (binary_frame <= 150).astype(np.uint8)
+        return foreground_logical_matrix, background_logical_matrix
+
+    @staticmethod
+    def define_bounding_rect(I, bound_rect):
+        return I[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]]
+
+    def handle_first_frame(self):
+
+        _, extracted_Frame = self.extracted_video_cap.read()
+        _, binary_frame = self.binary_video_cap.read()
+        binary_frame = cv2.cvtColor(binary_frame, cv2.COLOR_BGR2GRAY)
+
+        foreground_logical_matrix, background_logical_matrix = self.create_foreground_background_pixels_map(
+            binary_frame)
+
+        _, _, value_channel = cv2.split(cv2.cvtColor(extracted_Frame, cv2.COLOR_BGR2HSV))
+
+        # calculate KDE for background and foreground from scribbles
+        x_grid = np.linspace(0, 255, 256)
+
+        kde_foreground = gaussian_kde(value_channel[np.where(foreground_logical_matrix == 1)], bw_method='silverman')
+        kde_foreground_pdf = kde_foreground.evaluate(x_grid)
+
+        kde_bg = gaussian_kde(value_channel[np.where(background_logical_matrix == 1)], bw_method='silverman')
+        kde_bg_pdf = kde_bg.evaluate(x_grid)
+
+        # probabilties of background and foreground
+        P_F_given_c = kde_foreground_pdf / (kde_foreground_pdf + kde_bg_pdf)
+        P_B_given_c = kde_bg_pdf / (kde_foreground_pdf + kde_bg_pdf)
+
+        Vf = np.zeros((self.frame_height, self.frame_width))
+        Vb = np.zeros((self.frame_height, self.frame_width))
+
+        trimap = np.zeros((self.frame_height, self.frame_width))
+
+        Wf = np.zeros((self.frame_height, self.frame_width))
+        Wb = np.zeros((self.frame_height, self.frame_width))
+
+        # change new background dimensions #
+        new_BG = plt.imread(project_constants.BACKGROUND_IMAGE_PATH)
+        new_BG = cv2.resize(new_BG, (self.frame_width, self.frame_height))
+        new_BG = cv2.cvtColor(new_BG, cv2.COLOR_RGB2BGR)
+        # change new background dimensions #
+
+        # probabilities map of background and foreground
+        FG_Pr_map = P_F_given_c[value_channel]
+        BG_Pr_map = P_B_given_c[value_channel]
+
+        Normalized_FG_Pr_map = self.normalize_frame(FG_Pr_map) * 255.
+        Normalized_BG_Pr_map = self.normalize_frame(BG_Pr_map) * 255.
+
+        # compute distance map
+        fg_dmap = GeodisTK.geodesic2d_fast_marching(Normalized_FG_Pr_map.astype('float32'), foreground_logical_matrix)
+        bg_dmap = GeodisTK.geodesic2d_fast_marching(Normalized_BG_Pr_map.astype('float32'), background_logical_matrix)
+
+        Vf[(fg_dmap.astype('int') - bg_dmap.astype('int')) <= 0] = 255
+        Vb[(bg_dmap.astype('int') - fg_dmap.astype('int')) <= 0] = 255
+
+        # delta
+        se1 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        BWerode = cv2.morphologyEx(Vf, cv2.MORPH_ERODE, se1)
+        delta = (255 * (np.abs(BWerode - Vf) > 0)).astype('uint8')
+
+        # union of euclidean balls with radius rho
+        rho = project_constants.Rho_first_frame  # expresses the amount of uncertainty in the narrow band refinement process
+        se2 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (rho, rho))
+        narrow_band = cv2.morphologyEx(delta, cv2.MORPH_DILATE, se2)
+
+        # trimap
+        trimap[(Vf == 255) & (narrow_band == 0)] = 1
+        trimap[(Vb == 255) & (narrow_band == 0)] = 0
+        trimap[narrow_band == 255] = 0.5  # undecided region
+
+        # alpha + matting
+        trimap_mask = ((trimap == 0.5) & (fg_dmap != 0) & (bg_dmap != 0))
+
+        Wf[trimap_mask] = ((fg_dmap[trimap_mask] / 1.0) ** (-1 * self.distance_map_radius)) * FG_Pr_map[trimap_mask]
+        Wb[trimap_mask] = ((bg_dmap[trimap_mask] / 1.0) ** (-1 * self.distance_map_radius)) * BG_Pr_map[trimap_mask]
+        alpha = trimap.copy()
+        alpha[trimap_mask] = Wf[trimap_mask] / (Wf[trimap_mask] + Wb[trimap_mask])
+        alpha[fg_dmap == 0] = 1
+        alpha[bg_dmap == 0] = 0
+        alpha = np.atleast_3d(alpha)
+        alpha = cv2.merge([alpha, alpha, alpha])
+
+        matted_frame = alpha * extracted_Frame.astype('float') + (1 - alpha) * new_BG.astype('float')
+        matted_frame = matted_frame.astype('uint8')
+
+        matted_frame_1080p = cv2.resize(matted_frame, (int(self.output_frame_width), int(self.output_frame_height)))
+
+        alpha_1080p = cv2.resize((self.normalize_frame(alpha) * 255.).astype('uint8'),
+                                 (int(self.output_frame_width), int(self.output_frame_height)))
+
+        self.matted_video_writer.write(matted_frame_1080p)
+        self.alpha_video_writer.write(alpha_1080p)
+        self.progress_bar.update(1)
+
+        return P_F_given_c, P_B_given_c, new_BG
+
+    @staticmethod
+    def normalize_frame(frame):
+        normalized_frame = (1. * frame - np.amin(frame)) / (np.amax(frame) - np.amin(frame))
+        return normalized_frame
+
+    def create_matted_and_alpha_video(self, P_F_given_c, P_B_given_c, new_BG):
+
+        se_binary_fg = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 5)).T
+        se_binary_bg = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        rho = project_constants.Rho_second_frame
+        se1 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        se2 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (rho, rho))
+
+        # loop for creating following frames for matted vid #
+        for i in range(self.number_of_frames - 1):
+            _, extracted_frame = self.extracted_video_cap.read()
+            if extracted_frame is None:
+                break
+
+            _, binary_frame = self.binary_video_cap.read()
+            _, binary_frame = cv2.threshold(binary_frame[:, :, 0], 0, 255, cv2.THRESH_OTSU)  # avoid noise
+
+            bound_rect = cv2.boundingRect(binary_frame)
+
+            binary_frame = self.define_bounding_rect(binary_frame, bound_rect)
+
+            value_channel = cv2.split(cv2.cvtColor(extracted_frame, cv2.COLOR_BGR2HSV))[2]
+            value_channel = self.define_bounding_rect(value_channel, bound_rect)
+
+            FG_Pr_map = P_F_given_c[value_channel]
+            BG_Pr_map = P_B_given_c[value_channel]
+
+            FG_Pr_map = self.normalize_frame(FG_Pr_map) * 255.
+            BG_Pr_map = self.normalize_frame(BG_Pr_map) * 255.
+
+            fg_prob_grad = np.sqrt((cv2.Sobel(FG_Pr_map, cv2.CV_64F, 1, 0, ksize=5)) ** 2 + (
+                cv2.Sobel(FG_Pr_map, cv2.CV_64F, 0, 1, ksize=5)) ** 2)
+            fg_prob_grad = self.normalize_frame(fg_prob_grad) * 255.
+
+            # binary frame to seeds conversion #
+            binary_frame_fg = cv2.morphologyEx(binary_frame, cv2.MORPH_ERODE, se_binary_fg, iterations=2)
+            binary_frame_bg = cv2.morphologyEx(binary_frame, cv2.MORPH_DILATE, se_binary_bg, iterations=6)
+            binary_frame_bg = np.bitwise_not(binary_frame_bg)
+            # binary frame to seeds conversion #
+
+            fg_dmap = GeodisTK.geodesic2d_fast_marching(fg_prob_grad.astype('float32'), binary_frame_fg)
+            bg_dmap = GeodisTK.geodesic2d_fast_marching(fg_prob_grad.astype('float32'), binary_frame_bg)
+
+            Vf = np.zeros(fg_dmap.shape)
+            Vb = np.zeros(fg_dmap.shape)
+            Wf = np.zeros(fg_dmap.shape)
+            Wb = np.zeros(fg_dmap.shape)
+            trimap = np.zeros(fg_dmap.shape)
+
+            Vf[(fg_dmap.astype('int') - bg_dmap.astype('int')) <= 0] = 255
+            Vb[(bg_dmap.astype('int') - fg_dmap.astype('int')) <= 0] = 255
+
+            # delta
+            BWerode = cv2.morphologyEx(Vf, cv2.MORPH_ERODE, se1)
+            delta = (255 * (np.abs(BWerode - Vf) > 0)).astype('uint8')
+
+            # union of euclidean balls with radius rho
+            narrow_band = cv2.morphologyEx(delta, cv2.MORPH_DILATE, se2)
+
+            trimap[(Vf == 255) & (narrow_band == 0)] = 1
+            trimap[(Vb == 255) & (narrow_band == 0)] = 0
+            trimap[narrow_band == 255] = 0.5  # undecided region
+
+            trimap_mask = ((trimap == 0.5) & (fg_dmap != 0) & (bg_dmap != 0))
+
+            Wf[trimap_mask] = ((fg_dmap[trimap_mask] / 1.0) ** (-1 * self.distance_map_radius)) * FG_Pr_map[trimap_mask]
+            Wb[trimap_mask] = ((bg_dmap[trimap_mask] / 1.0) ** (-1 * self.distance_map_radius)) * BG_Pr_map[trimap_mask]
+            alpha_bounding_rect = trimap.copy()
+            alpha_bounding_rect[trimap_mask] = Wf[trimap_mask] / (Wf[trimap_mask] + Wb[trimap_mask])
+            alpha_bounding_rect[fg_dmap == 0] = 1
+            alpha_bounding_rect[bg_dmap == 0] = 0
+            alpha = np.zeros(np.shape(extracted_frame))
+            alpha[bound_rect[1]:bound_rect[1] + bound_rect[3],
+            bound_rect[0]:bound_rect[0] + bound_rect[2]] = alpha_bounding_rect
+            alpha = np.atleast_3d(alpha)
+            alpha = cv2.merge([alpha, alpha, alpha])
+
+            alpha_1080p = cv2.resize((self.normalize_frame(alpha) * 255.).astype('uint8'),
+                                     (self.output_frame_width, self.output_frame_height))
+
+            matted_frame = alpha * extracted_frame.astype('float') + (1 - alpha) * new_BG.astype('float')
+
+            matted_frame_1080p = cv2.resize(matted_frame, (self.output_frame_width, self.output_frame_height))
+
+            self.matted_video_writer.write((matted_frame_1080p).astype('uint8'))
+
+            self.alpha_video_writer.write(alpha_1080p)
+
+            self.progress_bar.update(1)
+
+    def close_all_videos(self):
+
+        self.extracted_video_cap.release()
+        self.matted_video_writer.release()
+        self.alpha_video_writer.release()
+        self.binary_video_cap.release()
+        cv2.destroyAllWindows()
+        self.progress_bar.close()
 
     def main_image_matting_module(self):
+
         self.create_video_writers()
 
-        red_foreground_scrible, green_foreground_scrible, blue_foreground_scrible, red_background_scrible, \
-        green_background_scrible, blue_background_scrible = self.load_scribles()
+        P_F_given_c, P_B_given_c, new_BG = self.handle_first_frame()
+
+        self.create_matted_and_alpha_video(P_F_given_c, P_B_given_c, new_BG)
+
+        self.close_all_videos()
+
 
 if __name__ == '__main__':
     matting_module()
+    mat = image_matting()
+    mat.main_image_matting_module()
