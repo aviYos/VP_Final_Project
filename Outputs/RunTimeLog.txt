@@ -1,0 +1,2 @@
+Time taken for matting in seconds: 55.18549990653992
+Time taken for matting in seconds: 95.690589427948

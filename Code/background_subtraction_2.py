@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import project_constants
 import project_utils
+from image_matting import image_matting
 
 DIST_2_THRESHOLD = 300
 KNN_HISTORY = 20
@@ -221,6 +222,8 @@ class background_subtractor:
                 self.logger.debug('writing  frame number ' + str(frame_index) + ' to extracted video')
 
                 vid_writer_extracted.write(cv2.bitwise_and(frame, frame, mask=union_masks))
+
+                rect = cv2.boundingRect(union_masks)
 
             self.logger.debug('saving binary video')
 
