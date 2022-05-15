@@ -1,4 +1,5 @@
 import numpy as np
+import cv2
 
 # IDs
 ID1 = '315488171'
@@ -16,37 +17,13 @@ OUTPUT_PATH = f'../Outputs/OUTPUT_{ID1}_{ID2}.avi'
 LOGGER_NAME = '../Outputs/timing.json'
 TRACKING_LOOGER = '../Outputs/tracking.json'
 
-# Corner Detector parameters
-MAX_CORNERS = 30
-MIN_DISTANCE = 30
-QUALITY_LEVEL = 0.01
-K = 0.04  # previously 0.137
+# Stabilization Parameters
 
-# Lucas Kanade Video Stabilization parameters
-PYRAMID_FILTER = 1.0 / 256 * np.array([[1, 4, 6, 4, 1],
-                                       [4, 16, 24, 16, 4],
-                                       [6, 24, 36, 24, 6],
-                                       [4, 16, 24, 16, 4],
-                                       [1, 4, 6, 4, 1]])
-X_DERIVATIVE_FILTER = np.array([[1, 0, -1],
-                                [2, 0, -2],
-                                [1, 0, -1]])
-Y_DERIVATIVE_FILTER = X_DERIVATIVE_FILTER.copy().transpose()
-INTERPOLATION_ORDER = 3  # only 2 or 3 allowed
+motion = cv2.MOTION_EUCLIDEAN  # either cv2.MOTION_EUCLIDEAN or cv2.MOTION_HOMOGRAPHY
+sigma_mat_2D = np.array([[1000, 15, 10], [15, 1000, 10]])
+sigma_mat_3D = np.array([[1000, 15, 10], [15, 1000, 10], [1000, 15, 10]])
 
-SMALL_ENOUGH_H = 50
-SMALL_ENOUGH_W = 50
-
-WINDOW_SIZE_TAU = 5
-MAX_ITER_TAU = 20
-NUM_LEVELS_TAU = 8
-
-CROP_BORDER_EXTRA = 5
-SKIP_LEVEL = 1
-
-SMOOTHING_RADIUS = 50
-
-# Backgound Subtraction Parameters
+# Background Subtraction Parameters
 
 Background_Subtraction_Alpha = 0.05
 Background_Subtraction_T = 0.9

@@ -22,7 +22,7 @@ def get_video_parameters(capture: cv2.VideoCapture) -> dict:
             "frame_count": frame_count}
 
 
-def get_warp(img1, img2, motion = cv2.MOTION_EUCLIDEAN):
+def get_warp(img1, img2, motion=cv2.MOTION_EUCLIDEAN):
     imga = img1.copy().astype(np.float32)
     imgb = img2.copy().astype(np.float32)
     if len(imga.shape) == 3:
@@ -38,12 +38,12 @@ def get_warp(img1, img2, motion = cv2.MOTION_EUCLIDEAN):
     return warp_matrix
 
 
-def create_warp_stack(imgs, num_of_frames):
+def create_warp_stack(imgs, num_of_frames, motion=cv2.MOTION_EUCLIDEAN):
     warp_stack = []
     print('Creating warp stack...')
     pbar = tqdm(total=num_of_frames-1)
     for i, img in enumerate(imgs[:-1]):
-        warp_stack += [get_warp(img, imgs[i+1])]
+        warp_stack += [get_warp(img, imgs[i+1], motion)]
         pbar.update(1)
     pbar.close()
     return np.array(warp_stack)
@@ -79,7 +79,6 @@ def apply_warping_fullview(images, warp_stack, num_of_frames):
     top, bottom, left, right = get_border_pads(img_shape=images[0].shape, warp_stack=warp_stack)
     H = homography_gen(warp_stack)
     imgs = []
-    print('Applying warp...')
     pbar = tqdm(total=num_of_frames-1)
     for i, img in enumerate(images[1:]):
         H_tot = next(H)+np.array([[0, 0, left], [0, 0, top], [0, 0, 0]])
@@ -112,8 +111,7 @@ def moving_average(warp_stack, sigma_mat):
 
 
 def gaussian_stabilization(
-        input_video_path: str, output_video_path: str, window_size: int,
-        max_iter: int, num_levels: int) -> None:
+        input_video_path: str, output_video_path: str, motion=cv2.MOTION_EUCLIDEAN) -> None:
     cap = cv2.VideoCapture(input_video_path)
     # in order to use tqdm to monitor the progress, we require the number of frames in the video
     num_of_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -123,17 +121,19 @@ def gaussian_stabilization(
     size = vid_params.get("width"), vid_params.get("height")
     out = cv2.VideoWriter(output_video_path, fourcc, fps, size)
     images = []
-
+    if motion == cv2.MOTION_HOMOGRAPHY:
+        sigma_mat = project_constants.sigma_mat_3D
+    else:
+        sigma_mat = project_constants.sigma_mat_2D
     for i in range(num_of_frames):
         ret, frame = cap.read()
         if not ret:
             break
         images += [frame]
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-    warp_stack = create_warp_stack(images, num_of_frames)
+    warp_stack = create_warp_stack(images, num_of_frames, motion=motion)
     smoothed_warp, smoothed_trajectory, original_trajectory = moving_average(warp_stack,
-                                                                             sigma_mat=np.array(
-                                                                                 [[1000, 15, 10], [15, 1000, 10]]))
+                                                                             sigma_mat=sigma_mat)
+    print('Applying warp...')
     new_images = apply_warping_fullview(images=images, warp_stack=warp_stack - smoothed_warp,
                                         num_of_frames=num_of_frames)
     out.write(np.uint8(images[0]))
