@@ -14,8 +14,9 @@ BINARY_PATH = f'../Outputs/binary_{ID1}_{ID2}.avi'
 ALPHA_PATH = f'../Outputs/alpha_{ID1}_{ID2}.avi'
 MATTED_PATH = f'../Outputs/matted_{ID1}_{ID2}.avi'
 OUTPUT_PATH = f'../Outputs/OUTPUT_{ID1}_{ID2}.avi'
-LOGGER_NAME = '../Outputs/timing.json'
-TRACKING_LOOGER = '../Outputs/tracking.json'
+LOGGER_NAME = '../Temp/general_log.json'
+TIMING_LOGGER = '../Outputs/timing.json'
+TRACKING_LOGGER = '../Outputs/tracking.json'
 
 # Stabilization Parameters
 
