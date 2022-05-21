@@ -30,9 +30,9 @@ def get_warp(img1, img2, motion=cv2.MOTION_EUCLIDEAN):
     if len(imgb.shape) == 3:
         imgb = cv2.cvtColor(imgb, cv2.COLOR_BGR2GRAY)
     if motion == cv2.MOTION_HOMOGRAPHY:
-        warpMatrix=np.eye(3, 3, dtype=np.float32)
+        warpMatrix = np.eye(3, 3, dtype=np.float32)
     else:
-        warpMatrix=np.eye(2, 3, dtype=np.float32)
+        warpMatrix = np.eye(2, 3, dtype=np.float32)
     warp_matrix = cv2.findTransformECC(templateImage=imga,inputImage=imgb,
                                        warpMatrix=warpMatrix, motionType=motion)[1]
     return warp_matrix
@@ -101,13 +101,25 @@ def moving_average(warp_stack, sigma_mat):
     smoothed_trajectory = np.zeros(original_trajectory.shape)
     for i in range(x):
         for j in range(y):
-            kernel = signal.gaussian(10000, sigma_mat[i, j])
-            kernel = kernel/np.sum(kernel)
-            smoothed_trajectory[:, i, j] = ndimage.convolve(original_trajectory[:, i, j], kernel, mode='reflect')
+            smoothed_trajectory[:, i, j] = gauss_convolve(original_trajectory[:, i, j], project_constants.M,
+                                                          sigma_mat[i, j])
     smoothed_warp = np.apply_along_axis(lambda m:
                                         ndimage.convolve(m, [0, 1, -1], mode='reflect'),
                                         axis=0, arr=smoothed_trajectory)
     return smoothed_warp, smoothed_trajectory, original_trajectory
+
+
+def add_borders(frame: np.ndarray, start_rows: int, end_rows: int, start_cols: int, end_cols: int) -> np.ndarray:
+    h, w, _ = frame.shape
+    start_rows = min(h, start_rows)
+    start_cols = min(w, start_cols)
+    end_rows = min(h, end_rows)
+    end_cols = min(w, end_cols)
+    frame[:start_rows, :] = 0
+    frame[h-end_rows:, :] = 0
+    frame[:, :start_cols] = 0
+    frame[:, w-end_cols:] = 0
+    return frame
 
 
 def gaussian_stabilization(
@@ -141,8 +153,9 @@ def gaussian_stabilization(
         new_frame = new_images[i]
         if new_frame.size != size:
             new_frame = cv2.resize(new_frame, size)
+        new_frame = add_borders(new_frame, project_constants.START_ROWS, project_constants.END_ROWS,
+                                project_constants.START_COLS, project_constants.END_COLS)
         out.write(np.uint8(new_frame))
-
     cv2.destroyAllWindows()
     cap.release()
     out.release()

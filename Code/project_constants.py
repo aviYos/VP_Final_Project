@@ -23,6 +23,12 @@ TRACKING_LOGGER = '../Outputs/tracking.json'
 motion = cv2.MOTION_EUCLIDEAN  # either cv2.MOTION_EUCLIDEAN or cv2.MOTION_HOMOGRAPHY
 sigma_mat_2D = np.array([[1000, 15, 10], [15, 1000, 10]])
 sigma_mat_3D = np.array([[1000, 15, 10], [15, 1000, 10], [1000, 15, 10]])
+M = 10000  # number of points in Gaussian window
+# number of pixels to add black borders on stabilized video
+START_ROWS = 25
+END_ROWS = 25
+START_COLS = 25
+END_COLS = 0
 
 # Background Subtraction Parameters
 
