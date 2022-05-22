@@ -12,7 +12,8 @@ resize_factor = 2.5
 GER_NAME = '../Temp/Final_Project_Logger.log'
 SECOND_INPUT_VIDEO_PATH = '../Inputs/443_motorway_with_cars_1.mp4'
 INPUT_VIDEO_PATH = '../Inputs/INPUT.mp4'
-STABILIZE_PATH = f'../Outputs/stabilize_{ID1}_{ID2}.avi'
+#STABILIZE_PATH = f'../Outputs/stabilize_{ID1}_{ID2}.avi'
+STABILIZE_PATH = f'../Outputs/stabilize.avi'
 #EXTRACTED_PATH = f'../Outputs/extracted_{ID1}_{ID2}.mp4'
 #BINARY_PATH = f'../Outputs/binary_{ID1}_{ID2}.avi'
 EXTRACTED_PATH = f'../Outputs/extracted.avi'
@@ -70,6 +71,7 @@ SKIN_SAT_THRESHOLD_UPPER = 140
 SKIN_HUE_threshold = 15
 SKIN_VALUE_threshold = 179
 VALUE_NOISE_THRESHOLD = 190
+TRAIN_ITER = 8
 
 # Image matting
 Rho_first_frame = 3

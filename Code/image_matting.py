@@ -58,10 +58,6 @@ class image_matting:
         background_logical_matrix = (binary_frame <= 150).astype(np.uint8)
         return foreground_logical_matrix, background_logical_matrix
 
-    @staticmethod
-    def slice_frame_from_bounding_rect(frame, bound_rect):
-        return frame[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]]
-
     def load_background_image(self):
         background_image = plt.imread(project_constants.BACKGROUND_IMAGE_PATH)
         background_image = cv2.resize(background_image, (self.frame_width, self.frame_height))
@@ -82,8 +78,8 @@ class image_matting:
             alpha_bounding_rect[foreground_distance_map == 0] = 1
             alpha_bounding_rect[background_distance_map == 0] = 0
             alpha = np.zeros((self.frame_height, self.frame_width))
-            alpha[bound_rect[1]:bound_rect[1] + bound_rect[3],
-            bound_rect[0]:bound_rect[0] + bound_rect[2]] = alpha_bounding_rect
+            alpha[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]] = \
+                alpha_bounding_rect
 
         alpha = np.atleast_3d(alpha)
         alpha = cv2.merge([alpha, alpha, alpha])
@@ -116,7 +112,7 @@ class image_matting:
 
     @staticmethod
     def create_delta(Vf):
-        se1 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        se1 = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
         BWerode = cv2.morphologyEx(Vf, cv2.MORPH_ERODE, se1)
         delta = (255 * (np.abs(BWerode - Vf) > 0)).astype('uint8')
         return delta
@@ -138,7 +134,7 @@ class image_matting:
 
         # union of euclidean balls with radius rho
         rho = project_constants.Rho_first_frame  # expresses the amount of uncertainty in the narrow band refinement process
-        se2 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (rho, rho))
+        se2 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 
         # trimap
         narrow_band = cv2.morphologyEx(delta, cv2.MORPH_DILATE, se2)
@@ -225,29 +221,6 @@ class image_matting:
 
         return P_F_given_c, P_B_given_c
 
-    """"@staticmethod
-    def test_grab_cut(frame_hsv, rect):
-        mask = np.zeros(frame_hsv.shape[:2], dtype="uint8")
-        fgModel = np.zeros((1, 65), dtype="float")
-        bgModel = np.zeros((1, 65), dtype="float")
-        # apply GrabCut using the the bounding box segmentation method
-        (mask, bgModel, fgModel) = cv2.grabCut(frame_hsv, mask, rect, bgModel,
-                                               fgModel, iterCount=5, mode=cv2.GC_INIT_WITH_RECT)
-        values = (
-            ("Definite Background", cv2.GC_BGD),
-            ("Probable Background", cv2.GC_PR_BGD),
-            ("Definite Foreground", cv2.GC_FGD),
-            ("Probable Foreground", cv2.GC_PR_FGD),
-        )
-        # loop over the possible GrabCut mask values
-        for (name, value) in values:
-            # construct a mask that for the current value
-            print("[INFO] showing mask for '{}'".format(name))
-            valueMask = np.uint8(mask == value) * 255
-            # display the mask so we can visualize it
-            cv2.imshow(name, valueMask)
-            cv2.waitKey(0)"""
-
     def create_matted_and_alpha_video(self, P_F_given_c, P_B_given_c):
 
         se_binary_fg = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 5)).T
@@ -267,9 +240,9 @@ class image_matting:
 
             bound_rect = cv2.boundingRect(binary_frame)
 
-            binary_frame = self.slice_frame_from_bounding_rect(binary_frame, bound_rect)
+            binary_frame = project_utils.slice_frame_from_bounding_rect(binary_frame, bound_rect)
             value_channel = cv2.split(cv2.cvtColor(extracted_frame, cv2.COLOR_BGR2HSV))[2]
-            value_channel = self.slice_frame_from_bounding_rect(value_channel, bound_rect)
+            value_channel = project_utils.slice_frame_from_bounding_rect(value_channel, bound_rect)
 
             foreground_logical_matrix, background_logical_matrix = self.create_foreground_background_pixels_map(
                 binary_frame)

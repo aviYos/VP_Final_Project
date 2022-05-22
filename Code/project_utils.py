@@ -24,6 +24,13 @@ def get_video_fps(video_cap_hanlde):
     return int(video_cap_hanlde.get(cv2.CAP_PROP_FPS))
 
 
+def slice_frame_from_bounding_rect(frame, bound_rect):
+    return frame[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]]
+
+def insert_submatrix_from_bounding_rect(big, bound_rect, small):
+     big[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]] = small
+     return big
+
 def write_frames_to_video(video_full_path, video_fps, frames_to_save, frame_size):
     try:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
