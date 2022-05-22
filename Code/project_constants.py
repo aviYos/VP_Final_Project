@@ -1,4 +1,5 @@
 import numpy as np
+import cv2
 
 # IDs
 ID1 = '315488171'
@@ -28,13 +29,24 @@ BACKGROUND_SCRIBLE_PATH = r'../Temp/bg_scribbles.tiff'
 FOREGROUND_SCRIBLE_PATH = r'../Temp/fg_scribbles.tiff'
 BACKGROUND_IMAGE_PATH = '../Inputs/background.jpg'
 
-# Corner Detector parameters
-MAX_CORNERS = 40
-MIN_DISTANCE = 2
-QUALITY_LEVEL = 0.1
-K = 0.04  # previously 0.137
+# Stabilization Parameters
 
-# Lucas Kanade Video Stabilization parameters
+motion = cv2.MOTION_EUCLIDEAN  # can be either MOTION_TRANSLATION, MOTION_AFFINE, MOTION_EUCLIDEAN or MOTION_HOMOGRAPHY
+sigma_mat_2D = np.array([[1000, 15, 10], [15, 1000, 10]])
+sigma_mat_3D = np.array([[1000, 15, 10], [15, 1000, 10], [1000, 15, 10]])
+M = 10000  # number of points in Gaussian window
+# define the criteria for terminating the findTransformECC function, 2nd argument is number of iterations (default 50)
+# and 3rd argument is the termination epsilon (default 0.001)
+criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 50, 0.001)
+
+# Lucas-Kanade constants
+USE_LK = True  # boolean that controls whether optic flow is calculated or not
+# corner detector values
+MAX_CORNERS = 50
+MIN_DISTANCE = 30
+QUALITY_LEVEL = 0.01
+K = 0.04
+# pyramid filter and derivative filters
 PYRAMID_FILTER = 1.0 / 256 * np.array([[1, 4, 6, 4, 1],
                                        [4, 16, 24, 16, 4],
                                        [6, 24, 36, 24, 6],
@@ -45,19 +57,19 @@ X_DERIVATIVE_FILTER = np.array([[1, 0, -1],
                                 [1, 0, -1]])
 Y_DERIVATIVE_FILTER = X_DERIVATIVE_FILTER.copy().transpose()
 
-SMALL_ENOUGH_H = 50
-SMALL_ENOUGH_W = 50
-
+INTERPOLATION_ORDER = 3  # only 2 or 3 allowed
 WINDOW_SIZE_TAU = 5
-MAX_ITER_TAU = 5
-NUM_LEVELS_TAU = 5
+MAX_ITER_TAU = 20
+NUM_LEVELS_TAU = 8
+SKIP_LEVEL = 3  # -1 to not skip any pyramid levels
 
-START_ROWS = 15
-START_COLS = 5
-END_ROWS = 10
-END_COLS = 35
+# number of pixels to add black borders on stabilized video
+START_ROWS = 25
+END_ROWS = 25
+START_COLS = 20
+END_COLS = 0
 
-# Backgound Subtraction Parameters
+# Background Subtraction Parameters
 
 Background_Subtraction_Alpha = 0.05
 Background_Subtraction_T = 0.9

@@ -12,8 +12,8 @@ def create_time_dictionary():
     return time_dictionary
 
 
-def create_logger():
-    # Gets or creates a logger
+def create_general_logger():
+    # Gets or creates a general logger
     log_format = '%(asctime)s : %(levelname)s : %(funcName)s : %(message)s'
     logging.basicConfig(filename=project_constants.GER_NAME, level=logging.DEBUG, format=log_format)
     logger = logging.getLogger(project_constants.LOGGER_NAME)

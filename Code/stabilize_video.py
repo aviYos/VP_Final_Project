@@ -1,11 +1,10 @@
-import cv2
 import numpy as np
+import cv2
 import project_constants
 from tqdm import tqdm
 from scipy import signal, ndimage
 
-ID1 = 315488171
-ID2 = 314756297
+SMOOTHING_RADIUS = 50
 
 
 def get_video_parameters(capture: cv2.VideoCapture) -> dict:
@@ -189,16 +188,35 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     return image_warp
 
 
-def count_frames_manual(cap):
-    total = 0
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        total += 1
-        if cv2.waitKey(1) == ord('q'):
-            break
-    return total
+def movingAverage(curve, radius):
+    window_size = 2 * radius + 1
+    # Define the filter
+    f = np.ones(window_size) / window_size
+    # Add padding to the boundaries
+    curve_pad = np.lib.pad(curve, (radius, radius), 'edge')
+    # Apply convolution
+    curve_smoothed = np.convolve(curve_pad, f, mode='same')
+    # Remove padding
+    curve_smoothed = curve_smoothed[radius:-radius]
+    # return smoothed curve
+    return curve_smoothed
+
+
+def smooth(trajectory):
+    smoothed_trajectory = np.copy(trajectory)
+    # Filter the x, y and angle curves
+    for i in range(3):
+        smoothed_trajectory[:, i] = movingAverage(trajectory[:, i], radius=SMOOTHING_RADIUS)
+
+    return smoothed_trajectory
+
+
+def fixBorder(frame):
+    s = frame.shape
+    # Scale the image 4% without moving the center
+    T = cv2.getRotationMatrix2D((s[1] / 2, s[0] / 2), 0, 1.04)
+    frame = cv2.warpAffine(frame, T, (s[1], s[0]))
+    return frame
 
 
 def find_image_corner_pixels(I2: np.ndarray, window_size: int, k: float) \
@@ -305,6 +323,7 @@ def faster_lucas_kanade_optical_flow(
     w_factor = int(np.ceil(I1.shape[1] / (2 ** (num_levels - 1))))
     IMAGE_SIZE = (w_factor * (2 ** (num_levels - 1)),
                   h_factor * (2 ** (num_levels - 1)))
+    u_size = (IMAGE_SIZE[1], IMAGE_SIZE[0])
     if I1.shape != IMAGE_SIZE:
         I1 = cv2.resize(I1, IMAGE_SIZE)
     if I2.shape != IMAGE_SIZE:
@@ -317,9 +336,9 @@ def faster_lucas_kanade_optical_flow(
     v = np.zeros(pyramid_I2[-1].shape)
 
     for level_index in range(num_levels, -1, -1):
-
+        if project_constants.SKIP_LEVEL == level_index:
+            break
         warped_I2 = warp_image(pyramid_I2[level_index], u, v)
-
         # calculate parameters that don't change in each iteration
 
         for iter_idx in range(max_iter):
@@ -331,210 +350,19 @@ def faster_lucas_kanade_optical_flow(
         if level_index:
             u = 2 * cv2.resize(u, (pyramid_I1[level_index - 1].shape[1], pyramid_I1[level_index - 1].shape[0]))
             v = 2 * cv2.resize(v, (pyramid_I1[level_index - 1].shape[1], pyramid_I1[level_index - 1].shape[0]))
-
+    if u.shape != u_size:
+        u = cv2.resize(u, IMAGE_SIZE)
+    if v.shape != u_size:
+        v = cv2.resize(v, IMAGE_SIZE)
     return u, v
 
 
-def find_interpolation_matrix(I1: np.ndarray, i: int, j: int, u: np.ndarray, v: np.ndarray,
-                              Ix: np.ndarray, Iy: np.ndarray, Ixy: np.ndarray, order: int) -> np.ndarray:
-    if order == 3:
-        mat_1 = np.array([[1, 0, 0],
-                          [0, 0, 1],
-                          [-3, -3, -2]
-                          ])
-        ip1 = int(i + 1)
-        im1 = int(i - 1)
-        jp1 = int(j + 1)
-        jm1 = int(j - 1)
-        mat_2 = np.array([[I1[int(im1 + u[im1, jm1]), int(jm1 + v[im1, jm1])],
-                           I1[int(im1 + u[im1, jp1]), int(jp1 + v[im1, jp1])],
-                           Iy[int(im1 + u[im1, jm1]), int(jm1 + v[im1, jm1])]],
-                          [I1[int(ip1 + u[ip1, jm1]), int(jm1 + v[ip1, jm1])],
-                           I1[int(ip1 + u[ip1, jp1]), int(jp1 + v[ip1, jp1])],
-                           Iy[int(ip1 + u[ip1, jm1]), int(jm1 + v[ip1, jm1])]],
-                          [Ix[int(im1 + u[im1, jm1]), int(jm1 + v[im1, jm1])],
-                           Ix[int(im1 + u[im1, jp1]), int(jm1 + v[im1, jp1])],
-                           Ixy[int(im1 + u[im1, jm1]), int(jm1 + v[im1, jm1])]]
-                          ])
-        mat_3 = np.array([[1, 0, -3],
-                          [0, 0, 3],
-                          [0, 1, -2]])
-        m_i = np.dot(np.dot(mat_1, mat_2), mat_3)
-    else:
-        n10 = int(i)
-        n12 = int(i)
-        n21 = int(j)
-        n23 = int(j)
-        n20 = int(j + 1)
-        n11 = int(i + 1)
-        n22 = int(j - 1)
-        n13 = int(i - 1)
-        position_matrix = np.array([[1, n10, n20, n10 * n20],
-                                    [1, n11, n21, n11 * n21],
-                                    [1, n12, n22, n12 * n22],
-                                    [1, n13, n23, n13 * n23]])
-        translation_vector = np.array([I1[n10 + u[n10, n20], n20 + v[n10, n20]],
-                                       I1[n11 + u[n11, n21], n21 + v[n11, n21]],
-                                       I1[n12 + u[n12, n22], n22 + v[n12, n22]],
-                                       I1[n13 + u[n13, n23], n23 + v[n13, n23]],
-                                       ])
-        (A0, A1, A2, A3) = np.dot(np.linalg.inv(position_matrix), translation_vector)
-        m_i = np.array([[A0, A1], [A2, A3]])
-    return m_i
-
-
-# calculates the change in each iteration by multiplying kernel values with shifted image (sort of convolution)
-def calc_change_mat(m_i: np.ndarray, order: int, i: int, j: int, I1: np.ndarray,
-                    grad_I: np.ndarray, window_size: int) -> np.ndarray:
-    border_index = int(window_size / 2)
-    s = np.zeros((window_size, window_size))
-    # shift image to (k,l) and calculate s
-    curr_grad = grad_I[(i - border_index):(i + border_index + 1), (j - border_index):(j + border_index + 1)]
-    for k in range(order):
-        for l in range(order):
-            curr_I = I1[(i - k - border_index):(i - k + border_index + 1),
-                        (j - l - border_index):(j - l + border_index + 1)]
-            s += np.multiply(np.dot(curr_grad, curr_I), m_i[k, l])
-    return s
-
-
-# Lucas Kanade optical flow algorithm that does not use iterative warping
-def very_fast_lucas_kanade_optical_flow(
-        I1: np.ndarray, I2: np.ndarray, window_size: int, max_iter: int,
-        num_levels: int) -> tuple[np.ndarray, np.ndarray]:
-    """Calculate LK Optical Flow for max iterations in num-levels without iterative warping.
-
-    Args:
-        I1: np.ndarray. Image at time t.
-        I2: np.ndarray. Image at time t+1.
-        window_size: int. The window is of shape window_size X window_size.
-        max_iter: int. Maximal number of LK-steps for each level of the pyramid.
-        num_levels: int. Number of pyramid levels.
-
-    Returns:
-        (u, v): tuple of np.ndarray-s. Each one of the shape of the
-        original image. v encodes the shift in rows and u in columns.
-    """
-    h_factor = int(np.ceil(I1.shape[0] / (2 ** (num_levels - 1))))
-    w_factor = int(np.ceil(I1.shape[1] / (2 ** (num_levels - 1))))
-    IMAGE_SIZE = (w_factor * (2 ** (num_levels - 1)),
-                  h_factor * (2 ** (num_levels - 1)))
-    if I1.shape != IMAGE_SIZE:
-        I1 = cv2.resize(I1, IMAGE_SIZE)
-    if I2.shape != IMAGE_SIZE:
-        I2 = cv2.resize(I2, IMAGE_SIZE)
-    pyramid_I1 = build_pyramid(I1, num_levels)  # create levels list for I1
-    pyramid_I2 = build_pyramid(I2, num_levels)  # create levels list for I1
-
-    # start from u and v in the size of smallest image
-    u = np.zeros(pyramid_I2[-1].shape)
-    v = np.zeros(pyramid_I2[-1].shape)
-
-    for level_index in range(num_levels, -1, -1):
-
-        warped_I2 = warp_image(pyramid_I2[level_index], u, v)
-
-        # calculate all parameters before iterative section
-        I2_corners = find_image_corner_pixels(I2, window_size, k=project_constants.K)
-
-        Ix = signal.convolve2d(warped_I2, project_constants.X_DERIVATIVE_FILTER, mode='same')
-        Iy = signal.convolve2d(warped_I2, project_constants.Y_DERIVATIVE_FILTER, mode='same')
-        Ix_1 = signal.convolve2d(I1, project_constants.X_DERIVATIVE_FILTER, mode='same')
-        Iy_1 = signal.convolve2d(I1, project_constants.Y_DERIVATIVE_FILTER, mode='same')
-        Ixy_1 = signal.convolve2d(Ix_1, project_constants.Y_DERIVATIVE_FILTER, mode='same')
-        border_index = int(window_size / 2)
-        # calculate absolute gradient image
-        abs_grad_x = cv2.convertScaleAbs(Ix)
-        abs_grad_y = cv2.convertScaleAbs(Iy)
-        grad_I = cv2.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
-        A_stack = []  # LK matrix for each window around corner pixel
-        r_stack = []  # offset vector r
-        num_corners = 0
-        this_b = []
-        lim = int(project_constants.INTERPOLATION_ORDER + border_index)
-        for corner_pixel in I2_corners:
-            num_corners += 1
-            this_b.append(np.zeros((window_size, window_size)))
-            i, j = int(corner_pixel[1]), int(corner_pixel[0])
-            if (i > warped_I2.shape[0]) or (j > warped_I2.shape[1]):
-                continue
-            if i < lim or j < lim:
-                continue
-            Ix_vec = Ix[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1].flatten()
-            Iy_vec = Iy[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1].flatten()
-            A_stack.append(np.vstack((Ix_vec, Iy_vec)).T)
-            # A_stack.append(np.dot(grad_I[i - border_index:i + border_index + 1, j - border_index:j + border_index +
-            # 1], grad_I[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1].T))
-            r_stack.append(-1 * (grad_I[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1]) *
-                           warped_I2[i - border_index:i + border_index + 1, j - border_index:j + border_index + 1])
-        for iter_idx in range(max_iter):
-            du = np.zeros(pyramid_I2[level_index].shape)
-            dv = np.zeros(pyramid_I2[level_index].shape)
-            corner_ind = 0
-            for corner_pixel in I2_corners:
-                if corner_ind >= num_corners:
-                    break
-                i, j = int(corner_pixel[1]), int(corner_pixel[0])
-                if (i > warped_I2.shape[0]) or (j > warped_I2.shape[1]):
-                    continue
-                if i < lim or j < lim:
-                    continue
-                A = A_stack[corner_ind]
-                m_i = find_interpolation_matrix(pyramid_I1[level_index], i, j, u, v, Ix_1, Iy_1, Ixy_1,
-                                                order=project_constants.INTERPOLATION_ORDER)
-                change_mat = calc_change_mat(m_i, project_constants.INTERPOLATION_ORDER,
-                                             i, j, pyramid_I1[level_index], grad_I, window_size)
-                next_b = r_stack[corner_ind] + change_mat
-                try:
-                    out_vector = np.dot(np.linalg.inv(np.dot(A.T, A)), np.dot(A.T, this_b[corner_ind].flatten()))
-                    du[i, j] = out_vector[0]
-                    dv[i, j] = out_vector[1]
-                    corner_ind += 1
-                except np.linalg.LinAlgError:
-                    corner_ind += 1
-                    continue
-                this_b[corner_ind - 1] = next_b
-            u += du
-            v += dv
-
-        if level_index:
-            u = 2 * cv2.resize(u, (pyramid_I1[level_index - 1].shape[1], pyramid_I1[level_index - 1].shape[0]))
-            v = 2 * cv2.resize(v, (pyramid_I1[level_index - 1].shape[1], pyramid_I1[level_index - 1].shape[0]))
-
-    return u, v
-
-
-def crop_image(frame: np.ndarray) -> np.ndarray:
-    new_frame = frame[:, ~np.isnan(frame).all(axis=0)]  # remove cols
-    frame = new_frame[~np.isnan(frame).all(axis=1), :]  # remove rows
-    return frame
-
-
-def stabilize_video(
+def stabilize_video_new(
         input_video_path: str, output_video_path: str, window_size: int,
         max_iter: int, num_levels: int) -> None:
-    """Calculate LK Optical Flow to stabilize the video and save it to file.
-
-    Args:
-        input_video_path: str. path to input video.
-        output_video_path: str. path to output stabilized video.
-        window_size: int. The window is of shape window_size X window_size.
-        max_iter: int. Maximal number of LK-steps for each level of the pyramid.
-        num_levels: int. Number of pyramid levels.
-        start_rows: int. The number of lines to cut from top.
-        end_rows: int. The number of lines to cut from bottom.
-        start_cols: int. The number of columns to cut from left.
-        end_cols: int. The number of columns to cut from right.
-
-    Returns:
-        None.
-    """
     cap = cv2.VideoCapture(input_video_path)
     # in order to use tqdm to monitor the progress, we require the number of frames in the video
-    num_of_frames = count_frames_manual(cap)
-    cv2.destroyAllWindows()
-    cap.release()
-    cap = cv2.VideoCapture(input_video_path)
+    num_of_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     pbar = tqdm(total=num_of_frames)
     vid_params = get_video_parameters(cap)
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
@@ -542,9 +370,9 @@ def stabilize_video(
     size = vid_params.get("width"), vid_params.get("height")
     out = cv2.VideoWriter(output_video_path, fourcc, fps, size)
     isFirstFrame = True
-    frame_num = 0
     border_index = int(window_size / 2)
-    while cap.isOpened():
+
+    for i in range(num_of_frames - 2):
         ret, frame = cap.read()
         if not ret:
             break
@@ -562,17 +390,21 @@ def stabilize_video(
             prev_v = v
 
             prev_frame = gray_frame
+            transforms = np.zeros((num_of_frames - 1, 3), np.float32)
+            isFirstFrame = False
         else:
             if gray_frame.shape != size:
                 gray_frame = cv2.resize(gray_frame, size)
-            # (new_u, new_v) = faster_lucas_kanade_optical_flow(prev_frame, gray_frame,window_size,max_iter, num_levels)
-            (new_u, new_v) = very_fast_lucas_kanade_optical_flow(prev_frame, gray_frame,
-                                                                 window_size, max_iter, num_levels)
+            (new_u, new_v) = faster_lucas_kanade_optical_flow(prev_frame, gray_frame, window_size, max_iter, num_levels)
             h, w = new_u.shape
-            u_avg = np.average(new_u[border_index:h - border_index, border_index:w - border_index]) * np.ones(
-                new_u.shape)
-            v_avg = np.average(new_v[border_index:h - border_index, border_index:w - border_index]) * np.ones(
-                new_u.shape)
+            avg_u_corners = np.nanmean(np.where(new_u == 0, np.nan, new_u))
+            avg_v_corners = np.nanmean(np.where(new_v == 0, np.nan, new_v))
+            if np.isnan(avg_u_corners):
+                avg_u_corners = 0
+            if np.isnan(avg_v_corners):
+                avg_v_corners = 0
+            u_avg = avg_u_corners * np.ones(new_u.shape)
+            v_avg = avg_v_corners * np.ones(new_v.shape)
             u = new_u
             v = new_v
             u[border_index:h - border_index, border_index:w - border_index] = u_avg[border_index:h - border_index,
@@ -583,31 +415,68 @@ def stabilize_video(
                                                                               border_index:w - border_index] + prev_v[
                                                                                                                border_index:h - border_index,
                                                                                                                border_index:w - border_index]
+
+            prev_corners = find_image_corner_pixels(prev_frame, window_size, project_constants.K)
+            this_corners = []
+            src_corners = []
+            for corner in prev_corners:
+                x, y = int(corner[1]), int(corner[0])
+                if (x > (prev_frame.shape[0] - border_index)) or (y > (prev_frame.shape[1] - border_index)):
+                    continue
+                if x < border_index or y < border_index:
+                    continue
+                src_corners.append([x, y])
+                this_corners.append([int(x + u[x, y]), int(y + v[x, y])])
+            src_corners = np.array(src_corners)
+            this_corners = np.array(this_corners)
+            m, _ = cv2.estimateAffinePartial2D(src_corners, this_corners)
+            dx = m[0, 2]
+            dy = m[1, 2]
+            # Extract rotation angle
+            da = np.arctan2(m[1, 0], m[0, 0])
+            transforms[i] = [dx, dy, da]
+
             prev_u = u
             prev_v = v
             prev_frame = gray_frame
+            pbar.update(1)
 
-        # unlike in HW2, we perform the warp on each RGB channel separately and then merge between them
-        if not isFirstFrame:
-            (b, g, r) = cv2.split(frame)
-            b = warp_image(b, u, v)
-            b = crop_image(b)
-            if b.shape != size:
-                b = cv2.resize(b, size)
-            g = warp_image(g, u, v)
-            g = crop_image(g)
-            if g.shape != size:
-                g = cv2.resize(g, size)
-            r = warp_image(r, u, v)
-            r = crop_image(r)
-            if r.shape != size:
-                r = cv2.resize(r, size)
-            frame = cv2.merge([b, g, r])
-        else:
-            isFirstFrame = False
-        out.write(np.uint8(frame))
-        pbar.update(1)
-        frame_num = frame_num + 1
+    trajectory = np.cumsum(transforms, axis=0)
+
+    smoothed_trajectory = smooth(trajectory)
+    difference = smoothed_trajectory - trajectory
+    transforms_smooth = transforms + difference
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    for i in range(num_of_frames - 2):
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Extract transformations from the new transformation array
+        dx = transforms_smooth[i, 0]
+        dy = transforms_smooth[i, 1]
+        da = transforms_smooth[i, 2]
+
+        # Reconstruct transformation matrix accordingly to new values
+        m = np.zeros((2, 3), np.float32)
+        m[0, 0] = np.cos(da)
+        m[0, 1] = -np.sin(da)
+        m[1, 0] = np.sin(da)
+        m[1, 1] = np.cos(da)
+        m[0, 2] = dx
+        m[1, 2] = dy
+
+        # Apply affine wrapping to the given frame
+        frame_stabilized = cv2.warpAffine(frame, m, size)
+
+        # Fix border artifacts
+        frame_stabilized = fixBorder(frame_stabilized)
+
+        # If the image is too big, resize it.
+        if frame_stabilized.shape != size:
+            frame_stabilized = cv2.resize(frame_stabilized, size)
+        out.write(np.uint8(frame_stabilized))
         if cv2.waitKey(1) == ord('q'):
             break
 
