@@ -211,6 +211,7 @@ def lucas_kanade(imgs, num_of_frames, num_levels):
     pbar = tqdm(total=num_of_frames)
     border_index = int(project_constants.WINDOW_SIZE_TAU / 2)
     isFirstFrame = True
+    u_v_list = []
     for i, img in enumerate(imgs):
         if len(img.shape) == 3:
             gray_frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -252,14 +253,15 @@ def lucas_kanade(imgs, num_of_frames, num_levels):
             prev_v = v
             prev_frame = gray_frame
         pbar.update(1)
+        h, w, _ = imgs[0].shape
+        u_avg = u[int(h / 2), int(w / 2)]
+        v_avg = v[int(h / 2), int(w / 2)]
+        u_v_list.append((u_avg, v_avg))
     pbar.close()
-    h, w, _ = imgs[0].shape
-    u_avg = u[int(h / 2), int(w / 2)]
-    v_avg = v[int(h / 2), int(w / 2)]
-    return u_avg, v_avg
+    return u_v_list
 
 
-def get_warp(img1, img2, motion=cv2.MOTION_EUCLIDEAN, u_avg=0, v_avg=0):
+def get_warp(img1, img2, motion=cv2.MOTION_EUCLIDEAN, u_v_list=None, index=0):
     imga = img1.copy().astype(np.float32)
     imgb = img2.copy().astype(np.float32)
     if len(imga.shape) == 3:
@@ -271,8 +273,8 @@ def get_warp(img1, img2, motion=cv2.MOTION_EUCLIDEAN, u_avg=0, v_avg=0):
     else:
         warpMatrix = np.eye(2, 3, dtype=np.float32)
     if project_constants.USE_LK:
-        warpMatrix[0, 2] = u_avg
-        warpMatrix[1, 2] = v_avg
+        warpMatrix[0, 2] = u_v_list[index][0]
+        warpMatrix[1, 2] = u_v_list[index][1]
     warp_matrix = cv2.findTransformECC(templateImage=imga, inputImage=imgb,
                                        warpMatrix=warpMatrix, motionType=motion, criteria=project_constants.criteria)[1]
     return warp_matrix
@@ -280,14 +282,12 @@ def get_warp(img1, img2, motion=cv2.MOTION_EUCLIDEAN, u_avg=0, v_avg=0):
 
 def create_warp_stack(imgs, num_of_frames, motion=cv2.MOTION_EUCLIDEAN):
     warp_stack = []
-    u_avg = 0
-    v_avg = 0
     if project_constants.USE_LK:
-        u_avg, v_avg = lucas_kanade(imgs, num_of_frames, project_constants.NUM_LEVELS_TAU)
+        u_v_list = lucas_kanade(imgs, num_of_frames, project_constants.NUM_LEVELS_TAU)
     print('Creating warp stack...')
     pbar = tqdm(total=num_of_frames - 1)
     for i, img in enumerate(imgs[:-1]):
-        warp_stack += [get_warp(img, imgs[i+1], motion, u_avg, v_avg)]
+        warp_stack += [get_warp(img, imgs[i+1], motion, u_v_list, i+1)]
         pbar.update(1)
     pbar.close()
     return np.array(warp_stack)
@@ -392,7 +392,10 @@ def gaussian_stabilization(
     print('Applying warp...')
     new_images = apply_warping_fullview(images=images, warp_stack=warp_stack - smoothed_warp,
                                         num_of_frames=num_of_frames)
-    out.write(np.uint8(images[0]))
+    first_frame = images[0]
+    first_frame = add_borders(first_frame, project_constants.START_ROWS, project_constants.END_ROWS,
+                              project_constants.START_COLS, project_constants.END_COLS)
+    out.write(np.uint8(first_frame))
     for i in range(num_of_frames-1):
         new_frame = new_images[i]
         if new_frame.size != size:

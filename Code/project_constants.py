@@ -50,12 +50,12 @@ INTERPOLATION_ORDER = 3  # only 2 or 3 allowed
 WINDOW_SIZE_TAU = 5
 MAX_ITER_TAU = 20
 NUM_LEVELS_TAU = 8
-SKIP_LEVEL = 4  # -1 to not skip any pyramid levels
+SKIP_LEVEL = 3  # -1 to not skip any pyramid levels
 
 # number of pixels to add black borders on stabilized video
 START_ROWS = 25
 END_ROWS = 25
-START_COLS = 25
+START_COLS = 20
 END_COLS = 0
 
 # Background Subtraction Parameters
