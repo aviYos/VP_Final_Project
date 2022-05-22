@@ -1,6 +1,7 @@
 import logging
 import project_constants
 import cv2
+import json
 
 ID1 = 315488171
 ID2 = 314756297
@@ -27,9 +28,11 @@ def get_video_fps(video_cap_hanlde):
 def slice_frame_from_bounding_rect(frame, bound_rect):
     return frame[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]]
 
+
 def insert_submatrix_from_bounding_rect(big, bound_rect, small):
      big[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]] = small
      return big
+
 
 def write_frames_to_video(video_full_path, video_fps, frames_to_save, frame_size):
     try:
@@ -42,3 +45,6 @@ def write_frames_to_video(video_full_path, video_fps, frames_to_save, frame_size
         print(' counld not save video to path ' + str(video_full_path) + ' Error : ' + str(e))
 
 
+def write_to_json_file(file_path: str, dict_to_add: dict):
+    with open(file_path, 'w') as f:
+        json.dump(dict_to_add, f, indent=4)
