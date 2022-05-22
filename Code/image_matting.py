@@ -13,10 +13,11 @@ class image_matting:
     def __init__(self):
         self.binary_video_cap = cv2.VideoCapture(project_constants.BINARY_PATH)
         self.extracted_video_cap = cv2.VideoCapture(project_constants.EXTRACTED_PATH)
-        self.logger = project_utils.create_logger()
+        self.logger = project_utils.create_general_logger()
         self.number_of_frames = int(self.extracted_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.frame_height = int(self.extracted_video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.frame_width = int(self.extracted_video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.frame_height = int(self.extracted_video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT) \
+                            / project_constants.resize_factor)
+        self.frame_width = int(self.extracted_video_cap.get(cv2.CAP_PROP_FRAME_WIDTH) / project_constants.resize_factor)
         self.fps = project_utils.get_video_fps(self.extracted_video_cap)
         self.output_frame_width = int(self.frame_width * project_constants.resize_factor)
         self.output_frame_height = int(self.frame_height * project_constants.resize_factor)
@@ -176,8 +177,11 @@ class image_matting:
     def handle_first_frame(self):
 
         _, extracted_Frame = self.extracted_video_cap.read()
+        extracted_Frame = cv2.resize(extracted_Frame, (self.frame_width, self.frame_height))
+
         _, binary_frame = self.binary_video_cap.read()
         binary_frame = cv2.cvtColor(binary_frame, cv2.COLOR_BGR2GRAY)
+        binary_frame = cv2.resize(binary_frame, (self.frame_width, self.frame_height))
 
         foreground_logical_matrix, background_logical_matrix = self.create_foreground_background_pixels_map(
             binary_frame)
@@ -226,16 +230,17 @@ class image_matting:
         se_binary_fg = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 5)).T
         se_binary_bg = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
         rho = project_constants.Rho_second_frame
-        se1 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        se2 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (rho, rho))
 
         # loop for creating following frames for matted vid #
         for i in range(self.number_of_frames - 1):
             _, extracted_frame = self.extracted_video_cap.read()
             if extracted_frame is None:
                 break
+            else:
+                extracted_frame = cv2.resize(extracted_frame, (self.frame_width, self.frame_height))
 
             _, binary_frame = self.binary_video_cap.read()
+            binary_frame = cv2.resize(binary_frame, (self.frame_width, self.frame_height))
             _, binary_frame = cv2.threshold(binary_frame[:, :, 0], 0, 255, cv2.THRESH_OTSU)  # avoid noise
 
             bound_rect = cv2.boundingRect(binary_frame)
@@ -264,7 +269,8 @@ class image_matting:
             foreground_distance_map = GeodisTK.geodesic2d_fast_marching(fg_prob_grad.astype('float32'), binary_frame_fg)
             background_distance_map = GeodisTK.geodesic2d_fast_marching(fg_prob_grad.astype('float32'), binary_frame_bg)
 
-            trimap = self.create_trimap(foreground_distance_map, background_distance_map, se2)
+            trimap = self.create_trimap(foreground_distance_map, background_distance_map,
+                                        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (rho, rho)))
 
             trimap_mask = ((trimap == 0.5) & (foreground_distance_map != 0) & (background_distance_map != 0))
 
@@ -281,9 +287,9 @@ class image_matting:
 
             matted_frame = alpha * extracted_frame.astype('float') + (1 - alpha) * self.background_image.astype('float')
 
-            matted_frame_1080p = cv2.resize(matted_frame, (self.output_frame_width, self.output_frame_height))
+            matted_frame_original_size = cv2.resize(matted_frame, (self.output_frame_width, self.output_frame_height))
 
-            self.matted_video_writer.write((matted_frame_1080p).astype('uint8'))
+            self.matted_video_writer.write((matted_frame_original_size).astype('uint8'))
 
             self.alpha_video_writer.write(alpha_1080p)
 

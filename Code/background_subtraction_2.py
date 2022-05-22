@@ -13,10 +13,9 @@ class background_subtractor:
 
     def __init__(self):
         self.knn_subtractor = cv2.createBackgroundSubtractorKNN(KNN_HISTORY, DIST_2_THRESHOLD, detectShadows=False)
-        self.video_cap = cv2.VideoCapture(project_constants.STABILIZED_VIDEO_PATH)
-        self.logger = project_utils.create_logger()
+        self.video_cap = cv2.VideoCapture(project_constants.STABILIZE_PATH)
+        self.logger = project_utils.create_general_logger()
         self.all_frames_foreground_mask = None
-        self.all_frames_foreground_extracted = None
         self.all_frames_binary_mask = None
         self.all_frames_Sat_channel_values = None
         self.number_of_frames = int(self.video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -327,7 +326,6 @@ class background_subtractor:
                 bounding_box_mask = self.get_bounding_rect_pixels(frame, bound_rect)
 
                 final_mask = self.color_filter(frame_hsv, bound_rect, bounding_box_mask, union_masks)
-
 
                 vid_writer_binary.write(final_mask)
 
