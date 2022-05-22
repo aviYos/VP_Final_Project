@@ -41,8 +41,11 @@ class image_matting:
 
     @staticmethod
     def normalize_frame(frame):
-        normalized_frame = (1. * frame - np.amin(frame)) / (np.amax(frame) - np.amin(frame)) * 255
-        return normalized_frame
+        try:
+            normalized_frame = (1. * frame - np.amin(frame)) / (np.amax(frame) - np.amin(frame)) * 255
+            return normalized_frame
+        except Exception as e:
+            print(e)
 
     @staticmethod
     def create_distance_map(Normalized_FG_Pr_map, Normalized_BG_Pr_map, foreground_logical_matrix,
@@ -243,9 +246,14 @@ class image_matting:
             binary_frame = cv2.resize(binary_frame, (self.frame_width, self.frame_height))
             _, binary_frame = cv2.threshold(binary_frame[:, :, 0], 0, 255, cv2.THRESH_OTSU)  # avoid noise
 
+
             bound_rect = cv2.boundingRect(binary_frame)
 
             binary_frame = project_utils.slice_frame_from_bounding_rect(binary_frame, bound_rect)
+            if not binary_frame.shape[0]:
+                continue
+
+
             value_channel = cv2.split(cv2.cvtColor(extracted_frame, cv2.COLOR_BGR2HSV))[2]
             value_channel = project_utils.slice_frame_from_bounding_rect(value_channel, bound_rect)
 
