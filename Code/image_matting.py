@@ -16,7 +16,7 @@ class image_matting:
         self.logger = project_utils.create_general_logger()
         self.number_of_frames = int(self.extracted_video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.frame_height = int(self.extracted_video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT) \
-                            / project_constants.resize_factor)
+                                / project_constants.resize_factor)
         self.frame_width = int(self.extracted_video_cap.get(cv2.CAP_PROP_FRAME_WIDTH) / project_constants.resize_factor)
         self.fps = project_utils.get_video_fps(self.extracted_video_cap)
         self.output_frame_width = int(self.frame_width * project_constants.resize_factor)
@@ -136,26 +136,22 @@ class image_matting:
 
         delta = self.create_delta(Vf)
 
-        # union of euclidean balls with radius rho
-        rho = project_constants.Rho_first_frame  # expresses the amount of uncertainty in the narrow band refinement process
-        se2 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-
         # trimap
-        narrow_band = cv2.morphologyEx(delta, cv2.MORPH_DILATE, se2)
+        narrow_band = cv2.morphologyEx(delta, cv2.MORPH_DILATE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
         trimap = np.zeros((self.frame_height, self.frame_width))
         trimap[(Vf == 255) & (narrow_band == 0)] = 1
         trimap[(Vb == 255) & (narrow_band == 0)] = 0
         trimap[narrow_band == 255] = 0.5  # undecided region
         return trimap
 
-    def create_trimap(self, foreground_distance_map, background_distance_map, se2):
+    def create_trimap(self, foreground_distance_map, background_distance_map):
 
         current_shape = foreground_distance_map.shape
         Vf, Vb = self.create_Vf_and_Vb(foreground_distance_map, background_distance_map, current_shape)
 
         delta = self.create_delta(Vf)
         # union of euclidean balls with radius rho
-        narrow_band = cv2.morphologyEx(delta, cv2.MORPH_DILATE, se2)
+        narrow_band = cv2.morphologyEx(delta, cv2.MORPH_DILATE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
         trimap = np.zeros(foreground_distance_map.shape)
         trimap[(Vf == 255) & (narrow_band == 0)] = 1
         trimap[(Vb == 255) & (narrow_band == 0)] = 0
@@ -230,10 +226,6 @@ class image_matting:
 
     def create_matted_and_alpha_video(self, P_F_given_c, P_B_given_c):
 
-        se_binary_fg = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 5)).T
-        se_binary_bg = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        rho = project_constants.Rho_second_frame
-
         # loop for creating following frames for matted vid #
         for i in range(self.number_of_frames - 1):
             _, extracted_frame = self.extracted_video_cap.read()
@@ -246,13 +238,11 @@ class image_matting:
             binary_frame = cv2.resize(binary_frame, (self.frame_width, self.frame_height))
             _, binary_frame = cv2.threshold(binary_frame[:, :, 0], 0, 255, cv2.THRESH_OTSU)  # avoid noise
 
-
             bound_rect = cv2.boundingRect(binary_frame)
 
             binary_frame = project_utils.slice_frame_from_bounding_rect(binary_frame, bound_rect)
             if not binary_frame.shape[0]:
                 continue
-
 
             value_channel = cv2.split(cv2.cvtColor(extracted_frame, cv2.COLOR_BGR2HSV))[2]
             value_channel = project_utils.slice_frame_from_bounding_rect(value_channel, bound_rect)
@@ -270,15 +260,16 @@ class image_matting:
             fg_prob_grad = self.normalize_frame(fg_prob_grad)
 
             # binary frame to seeds conversion #
-            binary_frame_fg = cv2.morphologyEx(binary_frame, cv2.MORPH_ERODE, se_binary_fg, iterations=2)
-            binary_frame_bg = cv2.morphologyEx(binary_frame, cv2.MORPH_DILATE, se_binary_bg, iterations=6)
+            binary_frame_fg = cv2.morphologyEx(binary_frame, cv2.MORPH_ERODE,
+                                               cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 5)).T, iterations=2)
+            binary_frame_bg = cv2.morphologyEx(binary_frame, cv2.MORPH_DILATE,
+                                               cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)), iterations=6)
             binary_frame_bg = np.bitwise_not(binary_frame_bg)
 
             foreground_distance_map = GeodisTK.geodesic2d_fast_marching(fg_prob_grad.astype('float32'), binary_frame_fg)
             background_distance_map = GeodisTK.geodesic2d_fast_marching(fg_prob_grad.astype('float32'), binary_frame_bg)
 
-            trimap = self.create_trimap(foreground_distance_map, background_distance_map,
-                                        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (rho, rho)))
+            trimap = self.create_trimap(foreground_distance_map, background_distance_map)
 
             trimap_mask = ((trimap == 0.5) & (foreground_distance_map != 0) & (background_distance_map != 0))
 
@@ -290,16 +281,16 @@ class image_matting:
             alpha = self.create_alpha_frame_from_trimap(trimap, trimap_mask, Wf, Wb, foreground_distance_map,
                                                         background_distance_map, bound_rect)
 
-            alpha_1080p = cv2.resize((self.normalize_frame(alpha)).astype('uint8'),
-                                     (self.output_frame_width, self.output_frame_height))
+            alpha_original_size = cv2.resize((self.normalize_frame(alpha)).astype('uint8'),
+                                             (self.output_frame_width, self.output_frame_height))
 
             matted_frame = alpha * extracted_frame.astype('float') + (1 - alpha) * self.background_image.astype('float')
 
             matted_frame_original_size = cv2.resize(matted_frame, (self.output_frame_width, self.output_frame_height))
 
-            self.matted_video_writer.write((matted_frame_original_size).astype('uint8'))
+            self.matted_video_writer.write(matted_frame_original_size.astype('uint8'))
 
-            self.alpha_video_writer.write(alpha_1080p)
+            self.alpha_video_writer.write(alpha_original_size)
 
             self.progress_bar.update(1)
 
