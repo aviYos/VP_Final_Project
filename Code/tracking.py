@@ -44,11 +44,9 @@ def tracking(
             break
         if len(binary_frame.shape) == 3:
             binary_frame = cv2.cvtColor(binary_frame, cv2.COLOR_BGR2GRAY)
-        contours, hierarchy = cv2.findContours(binary_frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        print("Number of contours: " + str(len(contours)))
-        x, y, w, h = cv2.boundingRect(contours[0])
-        tracking_dict[int(i+1)] = [x, y, w, h]
-        cv2.rectangle(extracted_frame, (x, y), (x+w, y+h), (0, 255, 0), 3)
+        x, y, w, h = cv2.boundingRect(binary_frame)
+        tracking_dict[int(i+1)] = [x, y, h, w]
+        cv2.rectangle(extracted_frame, (x, y), (x + w, y + h), (0, 255, 0), 3)
         out.write(np.uint8(extracted_frame))
         pbar.update(1)
         if cv2.waitKey(1) == ord('q'):
