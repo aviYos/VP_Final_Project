@@ -15,10 +15,10 @@ SECOND_INPUT_VIDEO_PATH = '../Inputs/443_motorway_with_cars_1.mp4'
 INPUT_VIDEO_PATH = '../Inputs/INPUT.avi'
 STABILIZE_PATH = f'../Outputs/stabilize_{ID1}_{ID2}.avi'
 # STABILIZE_PATH = f'../Outputs/stabilize.avi'
-# EXTRACTED_PATH = f'../Outputs/extracted_{ID1}_{ID2}.avi'
-# BINARY_PATH = f'../Outputs/binary_{ID1}_{ID2}.avi'
-EXTRACTED_PATH = f'../Outputs/extracted.avi'
-BINARY_PATH = f'../Outputs/binary.avi'
+EXTRACTED_PATH = f'../Outputs/extracted_{ID1}_{ID2}.avi'
+BINARY_PATH = f'../Outputs/binary_{ID1}_{ID2}.avi'
+# EXTRACTED_PATH = f'../Outputs/extracted.avi'
+# BINARY_PATH = f'../Outputs/binary.avi'
 ALPHA_PATH = f'../Outputs/alpha_{ID1}_{ID2}.avi'
 MATTED_PATH = f'../Outputs/matted_{ID1}_{ID2}.avi'
 OUTPUT_PATH = f'../Outputs/OUTPUT_{ID1}_{ID2}.avi'
@@ -89,5 +89,3 @@ TRAIN_ITER = 8
 Rho_first_frame = 3
 Rho_second_frame = 30
 distance_map_radius = 1.5
-
-# Tracking parameters
