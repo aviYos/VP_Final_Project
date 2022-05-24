@@ -184,10 +184,11 @@ class background_subtractor:
 
                     self.all_frames_Sat_channel_values[frame_index, :, :] = sat_channel
                     self.bg_sub_masks[frame_index, :, :] = self.knn_subtractor.apply(sat_channel)
-
                 self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                hsv_median_frame = np.mean(all_hsv_frames, axis=0).astype(dtype=np.uint8)
-                return hsv_median_frame
+
+            hsv_median_frame = np.mean(all_hsv_frames, axis=0).astype(dtype=np.uint8)
+            return hsv_median_frame
+
         except Exception as e:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
 
