@@ -45,7 +45,7 @@ def tracking(
         if len(binary_frame.shape) == 3:
             binary_frame = cv2.cvtColor(binary_frame, cv2.COLOR_BGR2GRAY)
         x, y, w, h = cv2.boundingRect(binary_frame)
-        tracking_dict[int(i+1)] = [x, y, h, w]
+        tracking_dict[int(i+1)] = [int(x), int(y), int(h), int(w)]
         cv2.rectangle(extracted_frame, (x, y), (x + w, y + h), (0, 255, 0), 3)
         out.write(np.uint8(extracted_frame))
         pbar.update(1)
