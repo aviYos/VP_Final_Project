@@ -37,22 +37,16 @@ class background_subtractor:
         try:
             _, knn_mask = cv2.threshold(foreground_mask, 30, 255, cv2.THRESH_OTSU)  # Binarize the BS frame
 
-            # plt.imshow(knn_mask, cmap='gray')
-            # plt.show()
-
-            knn_mask = cv2.morphologyEx(knn_mask, cv2.MORPH_ERODE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
-                                        iterations=3)  # separate foreground from BG noises not filtered by KNN
-
-            knn_mask = cv2.morphologyEx(knn_mask, cv2.MORPH_DILATE,
-                                        cv2.getStructuringElement(cv2.MORPH_RECT, (2, 14)),
-                                        iterations=4)
-
             knn_mask, _, _ = self.get_largest_connected_shape_in_mask(
                 knn_mask)  # Neutralize noises by eliminating all blobs other than the largest bloB
 
-            knn_mask = cv2.morphologyEx(knn_mask, cv2.MORPH_ERODE,
-                                        cv2.getStructuringElement(cv2.MORPH_RECT, (2, 5)),
+            knn_mask = cv2.morphologyEx(knn_mask, cv2.MORPH_DILATE,
+                                        cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
                                         iterations=4)
+
+            knn_mask = cv2.morphologyEx(knn_mask, cv2.MORPH_ERODE,
+                                        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+                                        iterations=2)
 
             # plt.imshow(knn_mask, cmap='gray')
             # plt.show()
@@ -65,29 +59,22 @@ class background_subtractor:
             # Unite all masks
             masks_union = median_filter_mask | knn_mask
 
-            # plt.imshow(masks_union, cmap='gray')
-            # plt.show()
+            masks_union, _, _ = self.get_largest_connected_shape_in_mask(
+                masks_union)
 
-            masks_union = cv2.morphologyEx(masks_union, cv2.MORPH_DILATE,
-                                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
-                                           iterations=2)
-
-            # plt.imshow(masks_union, cmap='gray')
-            # plt.show()
+            # reduce noise
+            masks_union = cv2.morphologyEx(masks_union, cv2.MORPH_ERODE,
+                                           cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 5)),
+                                           iterations=13)  # close holes in hands
 
             masks_union, _, _ = self.get_largest_connected_shape_in_mask(
-                masks_union)  # Neutralize noises by eliminating all blobs other than the largest blob
+                masks_union)
 
-            # plt.imshow(masks_union, cmap='gray')
-            # plt.show()
+            masks_union = cv2.morphologyEx(masks_union, cv2.MORPH_DILATE,
+                                           cv2.getStructuringElement(cv2.MORPH_CROSS, (1, 10)),
+                                           iterations=5)  # close holes in hands
 
-            # Some processing to reduce noise
-            masks_union[Value > project_constants.VALUE_NOISE_THRESHOLD] = 0
-            masks_union = cv2.morphologyEx(masks_union, cv2.MORPH_CLOSE,
-                                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
-                                           iterations=4)  # close holes in hands
-
-            # plt.imshow(masks_union, cmap='gray')
+            plt.imshow(masks_union, cmap='gray')
             # plt.show()
 
             masks_union[self.frame_height // 2:, :] = cv2.morphologyEx(masks_union[self.frame_height // 2:, :],
@@ -96,8 +83,14 @@ class background_subtractor:
                                                                                                  (5, 5)),
                                                                        iterations=3)  # separate legs
 
+            masks_union = cv2.morphologyEx(masks_union, cv2.MORPH_DILATE,
+                                           cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
+                                           iterations=2)
+
             masks_union, _, _ = self.get_largest_connected_shape_in_mask(
-                masks_union)  # Neutralize noises by eliminating all blobs other than the largest blob
+                masks_union)
+
+            plt.imshow(masks_union, cmap='gray')
 
             return masks_union
 
@@ -161,7 +154,7 @@ class background_subtractor:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
 
     def train_background_subtractor_knn(self):
-        T = 10
+        T = 5
         all_hsv_frames = []
         try:
             self.logger.debug(' training knn subtractor on  stabilized video')
@@ -216,73 +209,36 @@ class background_subtractor:
 
     def color_filter(self, frame_hsv, rect, bounding_box_mask, union_masks):
 
-        Hue, Sat, Value = cv2.split(frame_hsv)
-
-        sliced_sat = project_utils.slice_frame_from_bounding_rect(Sat, rect)
-        sliced_hue = project_utils.slice_frame_from_bounding_rect(Hue, rect)
-        sliced_value = project_utils.slice_frame_from_bounding_rect(Value, rect)
-
+        bgr = cv2.cvtColor(frame_hsv, cv2.COLOR_HSV2BGR)
         sliced_hsv_image = project_utils.slice_frame_from_bounding_rect(frame_hsv, rect)
+        bilateral_filter = cv2.bilateralFilter(sliced_hsv_image, 9, 75, 75)
+        self.try_k_means(sliced_hsv_image, rect)
 
-        # self.get_image_derivative(sliced_hsv_image)
-        # self.try_k_means(frame_hsv, rect)
-
-        median_of_sat = np.median(sliced_sat)
-        _, out_sat = cv2.threshold(sliced_sat, median_of_sat, 255, cv2.THRESH_BINARY)
-
-        # plt.imshow(out_sat, cmap='gray')
-        # plt.show()
-
-        median_of_hue = np.median(sliced_hue)
-        _, out_hue = cv2.threshold(sliced_hue, median_of_hue, 255, cv2.THRESH_BINARY)
-
-        # plt.imshow(out_hue, cmap='gray')
-        # plt.show()
-
-        median_of_value = np.median(sliced_value)
-        _, out_value = cv2.threshold(sliced_value, median_of_value, 255, cv2.THRESH_BINARY)
-
-        # plt.imshow(out_value, cmap='gray')
-        # plt.show()
-
-        sliced_union_mask = project_utils.slice_frame_from_bounding_rect(union_masks, rect)
-        final_mask = sliced_union_mask & out_sat
-
-        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_DILATE,
-                                      cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
-                                      iterations=3)
-
-        final_mask, _, _ = self.get_largest_connected_shape_in_mask(final_mask)
-        original_size_final_mask = np.zeros(union_masks.shape)
-        original_size_final_mask = project_utils.insert_submatrix_from_bounding_rect(original_size_final_mask, rect,
-                                                                                     final_mask)
-        return original_size_final_mask.astype(np.uint8)
+        return union_masks.astype(np.uint8)
 
     def new_median_filter(self, median_frame_hsv, hsv):
         dframe = cv2.absdiff(hsv, median_frame_hsv)
-        _, dframe_sat = cv2.threshold(dframe[:,:,1], 10, 255, cv2.THRESH_BINARY)
+        _, dframe_sat = cv2.threshold(dframe[:, :, 1], 25, 255, cv2.THRESH_BINARY)
 
-        dframe_sat,_,_ = self.get_largest_connected_shape_in_mask(dframe_sat)
+        dframe_sat, _, _ = self.get_largest_connected_shape_in_mask(dframe_sat)
 
-        _, dframe_val = cv2.threshold(dframe[:, :, 2], 10, 255, cv2.THRESH_BINARY)
+        _, dframe_val = cv2.threshold(dframe[:, :, 2], 40, 255, cv2.THRESH_BINARY)
 
-        dframe_val,_,_ = self.get_largest_connected_shape_in_mask(dframe_val)
+        dframe_val, _, _ = self.get_largest_connected_shape_in_mask(dframe_val)
 
         dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_DILATE,
-                                       cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
-                                       iterations=2)
+                                      cv2.getStructuringElement(cv2.MORPH_RECT, (5, 15)),
+                                      iterations=2)
 
         dframe_val = cv2.morphologyEx(dframe_val, cv2.MORPH_DILATE,
-                                      cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
+                                      cv2.getStructuringElement(cv2.MORPH_RECT, (5, 15)),
                                       iterations=2)
 
-        median_mask = dframe_sat & dframe_val
+        # median_mask = dframe_sat & dframe_val
 
-        final_median_mask = cv2.morphologyEx(median_mask, cv2.MORPH_CLOSE,
-                                      cv2.getStructuringElement(cv2.MORPH_RECT, (30, 30)),
-                                      iterations=2)
+        median_mask = dframe_sat
 
-        final_median_mask,_,_ = self.get_largest_connected_shape_in_mask(final_median_mask)
+        final_median_mask, _, _ = self.get_largest_connected_shape_in_mask(median_mask)
 
         plt.imshow(final_median_mask)
 
@@ -350,7 +306,7 @@ class background_subtractor:
 
                 # final_mask = self.apply_grabcut(bound_rect,frame, union_masks)
 
-                #final_mask = self.color_filter(frame_hsv, bound_rect, bounding_box_mask, union_masks)
+                # final_mask = self.color_filter(frame_hsv, bound_rect, bounding_box_mask, final_mask)
 
                 vid_writer_binary.write(final_mask)
 
