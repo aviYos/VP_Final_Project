@@ -45,16 +45,19 @@ class background_subtractor:
                                         iterations=4)
 
             knn_mask = cv2.morphologyEx(knn_mask, cv2.MORPH_ERODE,
-                                        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
-                                        iterations=2)
+                                        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+                                        iterations=7)
 
-            # plt.imshow(knn_mask, cmap='gray')
-            # plt.show()
+            knn_mask, _, _ = self.get_largest_connected_shape_in_mask(
+                knn_mask)  # Neutralize noises by eliminating all blobs other than the largest bloB
+
+            #plt.imshow(knn_mask, cmap='gray')
+            #plt.show()
             return knn_mask
         except Exception as e:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
 
-    def union_masks(self, median_filter_mask, knn_mask, Value):
+    def union_masks(self, median_filter_mask, knn_mask):
         try:
             # Unite all masks
             masks_union = median_filter_mask | knn_mask
@@ -90,7 +93,7 @@ class background_subtractor:
             masks_union, _, _ = self.get_largest_connected_shape_in_mask(
                 masks_union)
 
-            plt.imshow(masks_union, cmap='gray')
+            #plt.imshow(masks_union, cmap='gray')
 
             return masks_union
 
@@ -124,7 +127,8 @@ class background_subtractor:
         except Exception as e:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
 
-    def find_largest_contour(self, frame, fill=False):
+    @staticmethod
+    def find_largest_contour(frame, fill=False):
 
         frame = frame.astype(np.uint8)
         contours, hierarchy = cv2.findContours(
@@ -179,7 +183,7 @@ class background_subtractor:
                     self.bg_sub_masks[frame_index, :, :] = self.knn_subtractor.apply(sat_channel)
                 self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-            hsv_median_frame = np.mean(all_hsv_frames, axis=0).astype(dtype=np.uint8)
+            hsv_median_frame = np.median(all_hsv_frames, axis=0).astype(dtype=np.uint8)
             return hsv_median_frame
 
         except Exception as e:
@@ -227,12 +231,12 @@ class background_subtractor:
         dframe_val, _, _ = self.get_largest_connected_shape_in_mask(dframe_val)
 
         dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_DILATE,
-                                      cv2.getStructuringElement(cv2.MORPH_RECT, (5, 15)),
+                                      cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6)),
                                       iterations=2)
 
-        dframe_val = cv2.morphologyEx(dframe_val, cv2.MORPH_DILATE,
-                                      cv2.getStructuringElement(cv2.MORPH_RECT, (5, 15)),
-                                      iterations=2)
+        dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_ERODE,
+                                      cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)),
+                                      iterations=6)
 
         # median_mask = dframe_sat & dframe_val
 
@@ -277,7 +281,7 @@ class background_subtractor:
                 # B, G, R = cv2.split(frame)
                 frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-                frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                # frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
                 self.logger.debug('Transforming frame number ' + str(frame_index) + ' to HSV')
 
@@ -296,7 +300,7 @@ class background_subtractor:
 
                 self.logger.debug('Creating union mask from all masks for frame number ' + str(frame_index))
 
-                final_mask = self.union_masks(median_filter_mask, knn_mask, Value)
+                final_mask = self.union_masks(median_filter_mask, knn_mask)
 
                 self.logger.debug('writing  frame number ' + str(frame_index) + ' to binary video')
 
