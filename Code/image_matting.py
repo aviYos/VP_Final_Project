@@ -250,7 +250,8 @@ class image_matting:
             foreground_logical_matrix, background_logical_matrix = self.create_foreground_background_pixels_map(
                 binary_frame)
 
-            foreground_probability_map, background_probability_map, normalized_foreground_probability_map, normalized_background_probability_map, _, _ = self.create_probability_map(
+            foreground_probability_map, background_probability_map, normalized_foreground_probability_map, \
+            normalized_background_probability_map, _, _ = self.create_probability_map(
                 foreground_logical_matrix,
                 background_logical_matrix, value_channel, P_F_given_c, P_B_given_c, is_first_frame=False)
 

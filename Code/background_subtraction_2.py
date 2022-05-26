@@ -51,11 +51,24 @@ class background_subtractor:
             knn_mask, _, _ = self.get_largest_connected_shape_in_mask(
                 knn_mask)  # Neutralize noises by eliminating all blobs other than the largest bloB
 
-            #plt.imshow(knn_mask, cmap='gray')
-            #plt.show()
+            # plt.imshow(knn_mask, cmap='gray')
+            # plt.show()
             return knn_mask
         except Exception as e:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
+
+    def create_final_mask_from_sub_masks(self, original_masks_union, top_bound_rect, middle_bound_rect, down_bound_rect,
+                                         top_mask,
+                                         middle_mask, down_mask, bounded_mask, bound_rect_mask):
+
+        final_mask = np.zeros(original_masks_union.shape)
+        new_bounded_mask = np.zeros(bounded_mask.shape)
+        new_bounded_mask = project_utils.insert_submatrix_from_bounding_rect(new_bounded_mask, top_bound_rect, top_mask)
+        new_bounded_mask = project_utils.insert_submatrix_from_bounding_rect(new_bounded_mask, middle_bound_rect,
+                                                                           middle_mask)
+        new_bounded_mask = project_utils.insert_submatrix_from_bounding_rect(new_bounded_mask, down_bound_rect, down_mask)
+        final_mask = project_utils.insert_submatrix_from_bounding_rect(final_mask, bound_rect_mask, new_bounded_mask)
+        return final_mask
 
     def union_masks(self, median_filter_mask, knn_mask):
         try:
@@ -65,37 +78,46 @@ class background_subtractor:
             masks_union, _, _ = self.get_largest_connected_shape_in_mask(
                 masks_union)
 
-            # reduce noise
-            masks_union = cv2.morphologyEx(masks_union, cv2.MORPH_ERODE,
-                                           cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 5)),
-                                           iterations=13)  # close holes in hands
+            top_bound_rect, middle_bound_rect, down_bound_rect, top_mask, middle_mask, down_mask,\
+            bound_rect_mask, bound_rect = project_utils.split_bounding_rect(masks_union)
 
-            masks_union, _, _ = self.get_largest_connected_shape_in_mask(
-                masks_union)
+            # handle top part
 
-            masks_union = cv2.morphologyEx(masks_union, cv2.MORPH_DILATE,
-                                           cv2.getStructuringElement(cv2.MORPH_CROSS, (1, 10)),
-                                           iterations=5)  # close holes in hands
+            top_mask = cv2.morphologyEx(top_mask, cv2.MORPH_ERODE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+                                        iterations=8)  # close holes in hands
 
-            plt.imshow(masks_union, cmap='gray')
-            # plt.show()
+            top_mask = cv2.morphologyEx(top_mask, cv2.MORPH_DILATE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+                                        iterations=4)
 
-            masks_union[self.frame_height // 2:, :] = cv2.morphologyEx(masks_union[self.frame_height // 2:, :],
-                                                                       cv2.MORPH_OPEN,
-                                                                       cv2.getStructuringElement(cv2.MORPH_RECT,
-                                                                                                 (5, 5)),
-                                                                       iterations=3)  # separate legs
 
-            masks_union = cv2.morphologyEx(masks_union, cv2.MORPH_DILATE,
+            #top_mask, _, _ = self.get_largest_connected_shape_in_mask(top_mask)
+
+            #plt.imshow(top_mask, cmap='gray')
+            #plt.show()
+
+            middle_mask = cv2.morphologyEx(middle_mask, cv2.MORPH_OPEN,
                                            cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
                                            iterations=2)
 
-            masks_union, _, _ = self.get_largest_connected_shape_in_mask(
-                masks_union)
+            #middle_mask, _, _ = self.get_largest_connected_shape_in_mask(middle_mask)
 
-            #plt.imshow(masks_union, cmap='gray')
+            #plt.imshow(middle_mask, cmap='gray')
+            #plt.show()
 
-            return masks_union
+
+            down_mask = cv2.morphologyEx(down_mask, cv2.MORPH_CLOSE,
+                                         cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10)),
+                                         iterations=3)
+
+            #down_mask, _, _ = self.get_largest_connected_shape_in_mask(down_mask)
+
+            final_mask = self.create_final_mask_from_sub_masks(masks_union, top_bound_rect,
+                                middle_bound_rect,down_bound_rect, top_mask, middle_mask, down_mask,bound_rect_mask,bound_rect)
+
+            #plt.imshow(final_mask, cmap='gray')
+            #plt.show()
+
+            return final_mask.astype(np.uint8)
 
         except Exception as e:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
@@ -158,7 +180,7 @@ class background_subtractor:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
 
     def train_background_subtractor_knn(self):
-        T = 5
+        T = 8
         all_hsv_frames = []
         try:
             self.logger.debug(' training knn subtractor on  stabilized video')
@@ -235,7 +257,7 @@ class background_subtractor:
                                       iterations=2)
 
         dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_ERODE,
-                                      cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)),
+                                      cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
                                       iterations=6)
 
         # median_mask = dframe_sat & dframe_val

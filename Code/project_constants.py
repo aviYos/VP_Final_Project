@@ -85,7 +85,8 @@ SKIN_VALUE_threshold = 179
 VALUE_NOISE_THRESHOLD = 190
 TRAIN_ITER = 8
 
+
 # Image matting
 Rho_first_frame = 3
 Rho_second_frame = 30
-distance_map_radius = 1.5
+distance_map_radius = 6
