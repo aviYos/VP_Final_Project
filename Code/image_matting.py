@@ -73,6 +73,7 @@ class image_matting:
 
         if is_first_frame_flag:
             alpha = trimap.copy()
+            # Bug Over here - nans
             alpha[trimap_mask] = Wf[trimap_mask] / (Wf[trimap_mask] + Wb[trimap_mask])
             alpha[foreground_distance_map == 0] = 1
             alpha[background_distance_map == 0] = 0
@@ -200,7 +201,8 @@ class image_matting:
         trimap = self.create_trimap_first_frame(foreground_distance_map, background_distance_map)
 
         # alpha + matting
-        trimap_mask = ((trimap == 0.5) & (foreground_distance_map != 0) & (background_distance_map != 0))
+        #trimap_mask = ((trimap == 0.5) & (foreground_distance_map != 0) & (background_distance_map != 0))
+        trimap_mask = trimap == 0.5
 
         current_size = (self.frame_height, self.frame_width)
         Wf, Wb = self.create_Wf_Wb(trimap_mask, foreground_distance_map, background_distance_map,
