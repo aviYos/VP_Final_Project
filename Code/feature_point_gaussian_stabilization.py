@@ -168,8 +168,11 @@ def stabilize_video_with_gaussian(input_video_path, output_video_path):
                                         num_of_frames=num_frames)
     # Print to output video each frame and add borders according to default parameters or max top left corner
     first_frame = frames_bgr[0]
+    left = project_constants.START_COLS
+    if project_constants.CROP_FROM_START == 1:
+        left = project_constants.START_COLS_NEXT
     first_frame = add_borders(first_frame, project_constants.START_ROWS, project_constants.END_ROWS,
-                              project_constants.START_COLS, project_constants.END_COLS)
+                              left, project_constants.END_COLS)
     out.write(np.uint8(first_frame))
     left = project_constants.START_COLS
     for i in range(num_frames-1):

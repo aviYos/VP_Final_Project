@@ -42,7 +42,8 @@ START_ROWS = 70
 END_ROWS = 30
 START_COLS = 25
 END_COLS = 25
-INDEX_TO_ADD_CROP = 15
+INDEX_TO_ADD_CROP = -1  # original 15
+CROP_FROM_START = 1
 START_COLS_NEXT = 200
 
 # Background Subtraction Parameters
