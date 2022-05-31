@@ -55,8 +55,11 @@ def movingAverage(curve, radius):
 
 
 def gauss_convolve(trajectory, window, sigma):
-    kernel = signal.gaussian(window, std=sigma)
-    kernel = kernel/np.sum(kernel)
+    if sigma != 0:
+        kernel = signal.gaussian(window, std=sigma)
+        kernel = kernel / np.sum(kernel)
+    else:
+        kernel = np.zeros(window)
     return ndimage.convolve(trajectory, kernel, mode='reflect')
 
 
@@ -96,9 +99,15 @@ def add_borders(frame: np.ndarray, start_rows: int, end_rows: int, start_cols: i
 
 def homography_gen(warp_stack):
     H_tot = np.eye(3)
-    wsp = np.dstack([warp_stack[:, 0, :], warp_stack[:, 1, :], np.array([[0, 0, 1]]*warp_stack.shape[0])])
+    if project_constants.motion == cv2.MOTION_HOMOGRAPHY:
+        wsp = warp_stack
+    else:
+        wsp = np.dstack([warp_stack[:, 0, :], warp_stack[:, 1, :], np.array([[0, 0, 1]]*warp_stack.shape[0])])
     for i in range(len(warp_stack)):
-        H_tot = np.matmul(wsp[i].T, H_tot)
+        if project_constants.motion == cv2.MOTION_HOMOGRAPHY:
+            H_tot = np.matmul(wsp[i], H_tot)
+        else:
+            H_tot = np.matmul(wsp[i].T, H_tot)
         yield np.linalg.inv(H_tot)
 
 
@@ -169,7 +178,10 @@ def stabilize_video_with_gaussian(input_video_path, output_video_path):
         prev_pts = np.array([key_pt1[mat.queryIdx].pt for mat in matches])
         curr_pts = np.array([key_pt2[mat.trainIdx].pt for mat in matches])
         # Find transformation matrix
-        m, _ = cv2.estimateAffinePartial2D(prev_pts, curr_pts)
+        if project_constants.motion == cv2.MOTION_HOMOGRAPHY:
+            m, _ = cv2.findHomography(prev_pts, curr_pts, cv2.RANSAC, 5.0)
+        else:
+            m, _ = cv2.estimateAffinePartial2D(prev_pts, curr_pts)
         warp_stack += [m]
         prev_gray = curr_gray
         pbar.update(1)
