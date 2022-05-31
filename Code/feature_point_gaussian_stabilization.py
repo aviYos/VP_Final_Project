@@ -33,27 +33,8 @@ def detector(image1, image2):
     return keypoints_1, descriptors_1, keypoints_2, descriptors_2
 
 
-def movingAverage(curve, radius):
-    window_size = 2 * radius + 1
-    # Define the filter
-    f = np.ones(window_size) / window_size
-    # Add padding to the boundaries
-    curve_pad = np.lib.pad(curve, (radius, radius), 'reflect')
-
-    '''Fix padding manually'''
-    for i in range(radius):
-        curve_pad[i] = curve_pad[radius] - curve_pad[i]
-
-    for i in range(len(curve_pad) - 1, len(curve_pad) - 1 - radius, -1):
-        curve_pad[i] = curve_pad[len(curve_pad) - radius - 1] - curve_pad[i]
-
-    # Apply convolution
-    curve_smoothed = np.convolve(curve_pad, f, mode='same')
-    # Remove padding
-    curve_smoothed = curve_smoothed[radius:-radius]
-    return curve_smoothed
-
-
+# function that calculates the smoothed trajectory using Gaussian filters.
+# if sigma is 0 then the kernel is the zero matrix - meaning that there is no smoothing.
 def gauss_convolve(trajectory, window, sigma):
     if sigma != 0:
         kernel = signal.gaussian(window, std=sigma)
@@ -75,13 +56,6 @@ def moving_average(warp_stack, sigma_mat):
                                         ndimage.convolve(m, [0, 1, -1], mode='reflect'),
                                         axis=0, arr=smoothed_trajectory)
     return smoothed_warp, smoothed_trajectory, original_trajectory
-
-
-def smooth(trajectory, smooth_radius):
-    smoothed_trajectory = np.copy(trajectory)
-    for i in range(smoothed_trajectory.shape[1]):
-        smoothed_trajectory[:, i] = movingAverage(trajectory[:, i], radius=smooth_radius)
-    return smoothed_trajectory
 
 
 def add_borders(frame: np.ndarray, start_rows: int, end_rows: int, start_cols: int, end_cols: int) -> np.ndarray:
@@ -151,8 +125,6 @@ def stabilize_video_with_gaussian(input_video_path, output_video_path):
     size = vid_params.get("width"), vid_params.get("height")
     out = cv2.VideoWriter(output_video_path, fourcc, fps, size)
     frames_bgr = load_entire_video(cap, color_space='bgr')
-    w = size[0]
-    h = size[1]
     num_frames = vid_params.get("frame_count")
     prev = frames_bgr[0]
     prev_gray = cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY)
@@ -161,12 +133,6 @@ def stabilize_video_with_gaussian(input_video_path, output_video_path):
     pbar = tqdm(total=num_frames-1)
     warp_stack = []
     for frame_index, curr in enumerate(frames_bgr[1:]):
-        # prev_pts = cv2.goodFeaturesToTrack(prev_gray,
-        #                                   maxCorners=project_constants.MAX_CORNERS,
-        #                                   qualityLevel=project_constants.QUALITY_LEVEL,
-        #                                   minDistance=project_constants.MIN_DISTANCE,
-        #                                   blockSize=project_constants.BLOCK_SIZE)
-
         curr_gray = cv2.cvtColor(curr, cv2.COLOR_BGR2GRAY)
 
         key_pt1, descrip1, key_pt2, descrip2 = detector(prev_gray, curr_gray)
@@ -190,25 +156,30 @@ def stabilize_video_with_gaussian(input_video_path, output_video_path):
 
     # Write n_frames-1 transformed frames
     print('Applying warps to frame:')
+    # Perform Gaussian smoothing or no smoothing according to sigma_mat
     if project_constants.motion == cv2.MOTION_HOMOGRAPHY:
         sigma_mat = project_constants.sigma_mat_3D
     else:
         sigma_mat = project_constants.sigma_mat_2D
     smoothed_warp, smoothed_trajectory, original_trajectory = moving_average(warp_stack,
                                                                              sigma_mat=sigma_mat)
+    # Warp using the homography matrix with the warp stack being the difference between the original and smooth warps
     new_images = apply_warping_fullview(images=frames_bgr, warp_stack=warp_stack - smoothed_warp,
                                         num_of_frames=num_frames)
+    # Print to output video each frame and add borders according to default parameters or max top left corner
     first_frame = frames_bgr[0]
     first_frame = add_borders(first_frame, project_constants.START_ROWS, project_constants.END_ROWS,
                               project_constants.START_COLS, project_constants.END_COLS)
     out.write(np.uint8(first_frame))
+    left = project_constants.START_COLS
     for i in range(num_frames-1):
         new_frame = new_images[i]
         if new_frame.size != size:
             new_frame = cv2.resize(new_frame, size)
-        # new_frame = cv2.warpPerspective(frame, transform_matrix, (w, h))
+        if i >= project_constants.INDEX_TO_ADD_CROP:
+            left = project_constants.START_COLS_NEXT
         new_frame = add_borders(new_frame, project_constants.START_ROWS, project_constants.END_ROWS,
-                                project_constants.START_COLS, project_constants.END_COLS)
+                                left, project_constants.END_COLS)
         out.write(np.uint8(new_frame))
         pbar.update(1)
     pbar.close()

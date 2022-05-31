@@ -23,7 +23,7 @@ ALPHA_PATH = f'../Outputs/alpha_{ID1}_{ID2}.avi'
 MATTED_PATH = f'../Outputs/matted_{ID1}_{ID2}.avi'
 OUTPUT_PATH = f'../Outputs/OUTPUT_{ID1}_{ID2}.avi'
 LOGGER_NAME = '../Outputs/timing.json'
-TRACKING_LOOGER = '../Outputs/tracking.json'
+TRACKING_LOGGER = '../Outputs/tracking.json'
 STABILIZED_VIDEO_PATH = '../Inputs/stabilize_315488171_314756297.avi'
 BACKGROUND_SCRIBLE_PATH = r'../Temp/bg_scribbles.tiff'
 FOREGROUND_SCRIBLE_PATH = r'../Temp/fg_scribbles.tiff'
@@ -31,43 +31,19 @@ BACKGROUND_IMAGE_PATH = '../Inputs/background.jpg'
 
 # Stabilization Parameters
 
-motion = cv2.MOTION_EUCLIDEAN  # can be either MOTION_TRANSLATION, MOTION_AFFINE, MOTION_EUCLIDEAN or MOTION_HOMOGRAPHY
+motion = cv2.MOTION_HOMOGRAPHY  # can be either MOTION_TRANSLATION, MOTION_AFFINE, MOTION_EUCLIDEAN or MOTION_HOMOGRAPHY
+# sigma matrices for gaussian smoothing
 sigma_mat_2D = np.array([[1000, 15, 10], [15, 1000, 10]])
-sigma_mat_3D = np.array([[1000, 15, 10], [15, 1000, 10], [1000, 15, 10]])
+sigma_mat_3D = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
 M = 10000  # number of points in Gaussian window
-# define the criteria for terminating the findTransformECC function, 2nd argument is number of iterations (default 50)
-# and 3rd argument is the termination epsilon (default 0.001)
-criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 50, 0.001)
-
-# Lucas-Kanade constants
-USE_LK = True  # boolean that controls whether optic flow is calculated or not
-# corner detector values
-MAX_CORNERS = 50
-MIN_DISTANCE = 30
-QUALITY_LEVEL = 0.01
-K = 0.04
-# pyramid filter and derivative filters
-PYRAMID_FILTER = 1.0 / 256 * np.array([[1, 4, 6, 4, 1],
-                                       [4, 16, 24, 16, 4],
-                                       [6, 24, 36, 24, 6],
-                                       [4, 16, 24, 16, 4],
-                                       [1, 4, 6, 4, 1]])
-X_DERIVATIVE_FILTER = np.array([[1, 0, -1],
-                                [2, 0, -2],
-                                [1, 0, -1]])
-Y_DERIVATIVE_FILTER = X_DERIVATIVE_FILTER.copy().transpose()
-
-INTERPOLATION_ORDER = 3  # only 2 or 3 allowed
-WINDOW_SIZE_TAU = 5
-MAX_ITER_TAU = 20
-NUM_LEVELS_TAU = 8
-SKIP_LEVEL = 3  # -1 to not skip any pyramid levels
 
 # number of pixels to add black borders on stabilized video
-START_ROWS = 25
-END_ROWS = 25
-START_COLS = 20
-END_COLS = 0
+START_ROWS = 70
+END_ROWS = 30
+START_COLS = 25
+END_COLS = 25
+INDEX_TO_ADD_CROP = 15
+START_COLS_NEXT = 200
 
 # Background Subtraction Parameters
 
