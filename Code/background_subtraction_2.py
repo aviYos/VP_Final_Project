@@ -7,11 +7,14 @@ import matplotlib.pyplot as plt
 DIST_2_THRESHOLD = 50
 KNN_HISTORY = 40
 
+TOP_BORDER = 30
+DOWN_BORDER = 30
+
 
 class background_subtractor:
 
     def __init__(self):
-        #self.knn_subtractor = cv2.createBackgroundSubtractorKNN(KNN_HISTORY, DIST_2_THRESHOLD, detectShadows=True)
+        # self.knn_subtractor = cv2.createBackgroundSubtractorKNN(KNN_HISTORY, DIST_2_THRESHOLD, detectShadows=True)
         self.knn_subtractor = cv2.createBackgroundSubtractorKNN()
         self.video_cap = cv2.VideoCapture(project_constants.STABILIZE_PATH)
         self.logger = project_utils.create_general_logger()
@@ -36,15 +39,19 @@ class background_subtractor:
 
     def create_knn_subtractor_mask_for_frame(self, foreground_mask):
         try:
-            _, knn_mask = cv2.threshold(foreground_mask, 126, 255, cv2.THRESH_BINARY)  # shadow as background
+            _, knn_mask = cv2.threshold(foreground_mask, 200, 255, cv2.THRESH_BINARY)  # shadow as background
 
-            knn_mask, _, _ = self.get_largest_connected_shape_in_mask(
-                knn_mask)  # Neutralize noises by eliminating all blobs other than the largest bloB
+            h, w = knn_mask.shape
 
-            knn_mask = cv2.morphologyEx(knn_mask, cv2.MORPH_CLOSE,
-                                        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
-                                        iterations=2)
+            knn_mask[:int(np.floor(h / 2)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(h / 2)), :], cv2.MORPH_CLOSE,
+                                                                  cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+                                                                  iterations=4)
 
+            knn_mask[int(np.floor(h / 2)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(h / 2)):, :], cv2.MORPH_CLOSE,
+                                                                  cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (6, 6)),
+                                                                  iterations=1)
+
+            knn_mask, _, _ = self.get_largest_connected_shape_in_mask(knn_mask)
 
             # plt.imshow(knn_mask, cmap='gray')
             # plt.show()
@@ -77,38 +84,41 @@ class background_subtractor:
             top_bound_rect, middle_bound_rect, down_bound_rect, top_mask, middle_mask, down_mask, \
             bound_rect_mask, bound_rect = project_utils.split_bounding_rect(masks_union)
 
+            top_mask = cv2.morphologyEx(top_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
+                                        iterations=8)
+
+            middle_mask = cv2.morphologyEx(middle_mask, cv2.MORPH_CLOSE,
+                                                            cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+                                                            iterations=1)
+
+            down_mask= cv2.morphologyEx(down_mask, cv2.MORPH_CLOSE,
+                                                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (6, 6)),
+                                                          iterations=3)
+
             # handle top part
-
-            top_mask = cv2.morphologyEx(top_mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
-                                        iterations=2)  # close holes in hands
-
-            top_mask, _, _ = self.get_largest_connected_shape_in_mask(top_mask)
-
-            top_mask = cv2.morphologyEx(top_mask, cv2.MORPH_DILATE,
-                                        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (8, 8)),
+            """
+            TOP_INDEX = range(TOP_BORDER,int(np.floor(self.frame_height / 3)))
+            MIDDLE_INDEX = range(int((np.floor(self.frame_height / 3))),
+                                 int(np.floor(self.frame_height / 4) + np.floor(self.frame_height / 3)))
+            DOWN_INDEX = range(int(np.floor(self.frame_height / 4) + np.floor(self.frame_height / 3)),
+                                 self.frame_height-DOWN_BORDER)
+            
+            
+            
+            masks_union[TOP_INDEX,:] = cv2.morphologyEx(masks_union[TOP_INDEX,:], cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9)),
                                         iterations=1)  # close holes in hands
 
-            # plt.imshow(top_mask, cmap='gray')
-            # plt.show()
+            masks_union[MIDDLE_INDEX,:] = cv2.morphologyEx(masks_union[MIDDLE_INDEX,:], cv2.MORPH_CLOSE,
+                                           cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+                                           iterations=2)
 
-            middle_mask = cv2.morphologyEx(middle_mask, cv2.MORPH_OPEN,
-                                           cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
-                                           iterations=4)
-
-            # middle_mask, _, _ = self.get_largest_connected_shape_in_mask(middle_mask)
-
-            # plt.imshow(middle_mask, cmap='gray')
-            # plt.show()
-
-            down_mask = cv2.morphologyEx(down_mask, cv2.MORPH_CLOSE,
-                                         cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+            masks_union[DOWN_INDEX,:] = cv2.morphologyEx(masks_union[DOWN_INDEX,:], cv2.MORPH_CLOSE,
+                                         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4)),
                                          iterations=3)
-
-            # down_mask, _, _ = self.get_largest_connected_shape_in_mask(down_mask)
-
+            """
             final_mask = self.create_final_mask_from_sub_masks(masks_union, top_bound_rect,
-                                                               middle_bound_rect, down_bound_rect, top_mask,
-                                                               middle_mask, down_mask, bound_rect_mask, bound_rect)
+                                                              middle_bound_rect, down_bound_rect, top_mask,
+                                                             middle_mask, down_mask, bound_rect_mask, bound_rect)
 
             # plt.imshow(final_mask, cmap='gray')
             # plt.show()
@@ -176,7 +186,7 @@ class background_subtractor:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
 
     def train_background_subtractor_knn(self):
-        T = 5
+        T = 6
         all_hsv_frames = []
         try:
             self.logger.debug(' training knn subtractor on  stabilized video')
@@ -192,7 +202,7 @@ class background_subtractor:
                     if frame is None:
                         break
                     else:
-                        frame = cv2.GaussianBlur(frame, (3, 3), cv2.BORDER_DEFAULT)
+                        frame = cv2.GaussianBlur(frame, (31, 31), cv2.BORDER_REFLECT_101)
 
                     frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
                     if not i:
@@ -201,7 +211,7 @@ class background_subtractor:
                     _, sat_channel, value_channel = cv2.split(frame_hsv)
 
                     self.all_frames_Sat_channel_values[frame_index, :, :] = sat_channel
-                    self.bg_sub_masks[frame_index, :, :] = self.knn_subtractor.apply(frame_hsv[:,:,1:])
+                    self.bg_sub_masks[frame_index, :, :] = self.knn_subtractor.apply(frame_hsv[:, :, 1:])
                 self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
             hsv_median_frame = np.median(all_hsv_frames, axis=0).astype(dtype=np.uint8)
@@ -233,31 +243,30 @@ class background_subtractor:
         self.find_largest_contour(eroded_mask)
 
     def new_median_filter(self, median_frame_hsv, hsv):
+
         dframe = cv2.absdiff(hsv, median_frame_hsv)
-        _, dframe_sat = cv2.threshold(dframe[:, :, 1], 15, 255, cv2.THRESH_BINARY)
+
+        _, dframe_sat = cv2.threshold(dframe[:, :, 1], 40, 255, cv2.THRESH_BINARY)
+
+        dframe_sat, _, _ = self.get_largest_connected_shape_in_mask(dframe_sat)
+
+        dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_OPEN,
+                                      cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+                                      iterations=1)
 
         dframe_sat, _, _ = self.get_largest_connected_shape_in_mask(dframe_sat)
 
         _, dframe_val = cv2.threshold(dframe[:, :, 2], 40, 255, cv2.THRESH_BINARY)
 
+        dframe_val = cv2.morphologyEx(dframe_val, cv2.MORPH_OPEN,
+                                      cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+                                      iterations=1)
+
         dframe_val, _, _ = self.get_largest_connected_shape_in_mask(dframe_val)
 
-
-        dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_ERODE,
-                                      cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
-                                      iterations=2)
-
-        dframe_sat, _, _ = self.get_largest_connected_shape_in_mask(dframe_sat)
-
-
-        dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_DILATE,
-                                      cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6)),
-                                      iterations=2)
-
-        # median_mask = dframe_sat & dframe_val
-
-        median_mask = dframe_sat
-
+        median_mask = np.zeros(dframe_sat.shape)
+        median_mask[np.where(np.logical_and(dframe_sat > 0, dframe_val > 0))] = 255
+        median_mask = median_mask.astype(np.uint8)
         final_median_mask, _, _ = self.get_largest_connected_shape_in_mask(median_mask)
 
         # plt.imshow(final_median_mask)
