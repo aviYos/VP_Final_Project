@@ -1,7 +1,8 @@
 import project_constants
 import time
-from gaussian_stabilization import gaussian_stabilization
+from feature_point_gaussian_stabilization import stabilize_video_with_gaussian
 from background_subtraction import background_subtractor
+from image_matting import image_matting
 from tracking import tracking
 import project_utils
 
@@ -21,26 +22,45 @@ def main():
     logger.debug("Running video stabilization. Input path: " + project_constants.INPUT_VIDEO_PATH)
     print('Stabilizing video:')
     start_time = time.time()
-    gaussian_stabilization(project_constants.INPUT_VIDEO_PATH, project_constants.STABILIZE_PATH,
-                           project_constants.motion)
+    stabilize_video_with_gaussian(project_constants.INPUT_VIDEO_PATH, project_constants.STABILIZE_PATH)
     stabilization_end_time = time.time()
     stabilization_time = stabilization_end_time - start_time
-    logger.debug('video stabilization has been finished. Running time : ' +
+    logger.debug('video stabilization has finished. Runtime: ' +
                  str(stabilization_time) + ' seconds')
     time_dictionary['time_to_stabilize'] = stabilization_time
 
-    # Background Stabilization and Matting
-    # Class = background_subtractor(project_constants.STABILIZED_VIDEO_PATH,
-    #                              project_constants.Background_Subtraction_Alpha,
-    #                              project_constants.Background_Subtraction_T,
-    #                              project_constants.Background_Subtraction_Theta
-    #                              ).run_background_subtraction()
+    # Background Subtraction
+    logger.debug("Running background subtraction. Stabilized path: " + project_constants.STABILIZE_PATH)
+    print('Subtracting background:')
+    background_start_time = time.time()
+    background_subtractor_handle = background_subtractor()
+    background_subtractor_handle.main_background_subtraction_module()
+    background_end_time = time.time()
+    background_time = background_end_time - start_time
+    logger.debug('background subtraction has finished. Runtime: ' +
+                 str(background_end_time-background_start_time) + ' seconds')
+    time_dictionary['time_to_binary'] = background_time
+
+    # Matting
+    logger.debug("Running matting. Binary path: " + project_constants.BINARY_PATH + ". Extracted path:" +
+                 project_constants.EXTRACTED_PATH)
+    print('Matting extracted video to background image:')
+    matting_start_time = time.time()
+    mat = image_matting()
+    mat.main_image_matting_module()
+    matting_end_time = time.time()
+    matting_time = matting_end_time - start_time
+    logger.debug('matting has finished. Runtime: ' +
+                 str(matting_end_time - matting_start_time) + ' seconds')
+    time_dictionary['time_to_alpha'] = matting_time
+    time_dictionary['time_to_matted'] = matting_time
+
     # Tracking
     logger.debug("Running tracking program. Matted path: " + project_constants.MATTED_PATH)
     tracking_start_time = time.time()
-    # tracking(project_constants.MATTED_PATH, project_constants.BINARY_PATH, project_constants.OUTPUT_PATH)
+    tracking(project_constants.MATTED_PATH, project_constants.BINARY_PATH, project_constants.OUTPUT_PATH)
     tracking_end_time = time.time()
-    logger.debug('video stabilization has been finished. Running time : ' +
+    logger.debug('Tracking has finished. Runtime: ' +
                  str(tracking_end_time-tracking_start_time) + ' seconds')
     time_dictionary['time_to_output'] = tracking_end_time - start_time
     project_utils.write_to_json_file(project_constants.LOGGER_NAME, time_dictionary)
