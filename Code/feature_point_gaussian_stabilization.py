@@ -6,6 +6,7 @@ import project_constants
 from scipy import signal, ndimage
 
 
+# function that extracts input video parameters
 def get_video_parameters(capture: cv2.VideoCapture) -> dict:
     """Get an OpenCV capture object and extract its parameters.
     Args:
@@ -24,7 +25,7 @@ def get_video_parameters(capture: cv2.VideoCapture) -> dict:
 
 
 # function to detect the features by finding key points and
-# descriptors from the image (not unlike SIFT or Harris Corner Detector)
+# descriptors from the image using SIFT
 def detector(image1, image2):
     sift = cv2.xfeatures2d.SIFT_create()
 
@@ -44,6 +45,8 @@ def gauss_convolve(trajectory, window, sigma):
     return ndimage.convolve(trajectory, kernel, mode='reflect')
 
 
+# function that calculates the camera trajectory, and the smoothed trajectory by convolving with a gaussian kernel
+# or zero matrix, and the smoothed warp stack.
 def moving_average(warp_stack, sigma_mat):
     x, y = warp_stack.shape[1:]
     original_trajectory = np.cumsum(warp_stack, axis=0)
@@ -58,6 +61,7 @@ def moving_average(warp_stack, sigma_mat):
     return smoothed_warp, smoothed_trajectory, original_trajectory
 
 
+# function that adds black borders to the stabilized video to reduce noise due to moving borders
 def add_borders(frame: np.ndarray, start_rows: int, end_rows: int, start_cols: int, end_cols: int) -> np.ndarray:
     h, w, _ = frame.shape
     start_rows = min(h, start_rows)
@@ -71,6 +75,8 @@ def add_borders(frame: np.ndarray, start_rows: int, end_rows: int, start_cols: i
     return frame
 
 
+# function that calculates the homography matrix H_tot by multiplying warps defined in warp_stack.
+# if the motion is affine, then create a 3x3 matrix from each 2x3 warp matrix.
 def homography_gen(warp_stack):
     H_tot = np.eye(3)
     if project_constants.motion == cv2.MOTION_HOMOGRAPHY:
@@ -85,6 +91,7 @@ def homography_gen(warp_stack):
         yield np.linalg.inv(H_tot)
 
 
+# function that calculates the maximum deviation at each edge of the frame from the corners of the images due to warping
 def get_border_pads(img_shape, warp_stack) -> (int, int, int, int):
     top = 0
     bottom = 0
@@ -103,6 +110,8 @@ def get_border_pads(img_shape, warp_stack) -> (int, int, int, int):
     return int(top), int(bottom), int(left), int(right)
 
 
+# function that updates the homography matrix with border pads from get_border_pads and warps each
+# image with H_tot within the window size defined by the window shape and pads to get the stabilized image stack.
 def apply_warping_fullview(images, warp_stack, num_of_frames):
     top, bottom, left, right = get_border_pads(img_shape=images[0].shape, warp_stack=warp_stack)
     H = homography_gen(warp_stack)
@@ -117,6 +126,12 @@ def apply_warping_fullview(images, warp_stack, num_of_frames):
     return imgs
 
 
+# main stabilization function that performs:
+# 1) finds and matches between feature points and their descriptors, using SIFT and BFMatcher
+# 2) creates the warp matrix between the previous and current points using RANSAC
+# 3) performs gaussian smoothing or no smoothing on the image
+# 4) warps each frame according to the homography matrix created by multiplying the previous warp matrices
+# 5) adds black borders to the stabilized frames and places these frames in output video
 def stabilize_video_with_gaussian(input_video_path, output_video_path):
     cap = cv2.VideoCapture(input_video_path)
     vid_params = get_video_parameters(cap)
@@ -137,10 +152,11 @@ def stabilize_video_with_gaussian(input_video_path, output_video_path):
 
         key_pt1, descrip1, key_pt2, descrip2 = detector(prev_gray, curr_gray)
 
-        brute_force = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
+        # finding the L1 distance of the matches and sort them
+        brute_force = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
         matches = brute_force.match(descrip1, descrip2)
-        # finding the humming distance of the matches and sorting them
         matches = sorted(matches, key=lambda x: x.distance)
+        # create list of previous points and matched current points
         prev_pts = np.array([key_pt1[mat.queryIdx].pt for mat in matches])
         curr_pts = np.array([key_pt2[mat.trainIdx].pt for mat in matches])
         # Find transformation matrix
