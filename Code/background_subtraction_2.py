@@ -43,11 +43,15 @@ class background_subtractor:
 
             h, w = knn_mask.shape
 
+            knn_mask[:int(np.floor(h / 2)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(h / 2)), :], cv2.MORPH_OPEN,
+                                                                  cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
+                                                                  iterations=1)
+
             knn_mask[:int(np.floor(h / 2)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(h / 2)), :], cv2.MORPH_CLOSE,
                                                                   cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
-                                                                  iterations=4)
+                                                                  iterations=5)
 
-            knn_mask[int(np.floor(h / 2)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(h / 2)):, :], cv2.MORPH_CLOSE,
+            knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :], cv2.MORPH_CLOSE,
                                                                   cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (6, 6)),
                                                                   iterations=1)
 
@@ -85,10 +89,10 @@ class background_subtractor:
             bound_rect_mask, bound_rect = project_utils.split_bounding_rect(masks_union)
 
             top_mask = cv2.morphologyEx(top_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
-                                        iterations=8)
+                                        iterations=6)
 
             middle_mask = cv2.morphologyEx(middle_mask, cv2.MORPH_CLOSE,
-                                                            cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+                                                            cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
                                                             iterations=1)
 
             down_mask= cv2.morphologyEx(down_mask, cv2.MORPH_CLOSE,
@@ -186,7 +190,7 @@ class background_subtractor:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
 
     def train_background_subtractor_knn(self):
-        T = 6
+        T = 7
         all_hsv_frames = []
         try:
             self.logger.debug(' training knn subtractor on  stabilized video')
