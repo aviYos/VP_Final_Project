@@ -11,14 +11,10 @@ resize_factor = 2.5
 
 # File names
 GER_NAME = '../Temp/Final_Project_Logger.log'
-SECOND_INPUT_VIDEO_PATH = '../Inputs/443_motorway_with_cars_1.mp4'
 INPUT_VIDEO_PATH = '../Inputs/INPUT.mp4'
-#STABILIZE_PATH = f'../Outputs/stabilize_{ID1}_{ID2}.avi'
-STABILIZE_PATH = f'../Outputs/stabilize.avi'
-#EXTRACTED_PATH = f'../Outputs/extracted_{ID1}_{ID2}.mp4'
-#BINARY_PATH = f'../Outputs/binary_{ID1}_{ID2}.avi'
-EXTRACTED_PATH = f'../Outputs/extracted.avi'
-BINARY_PATH = f'../Outputs/binary.avi'
+STABILIZE_PATH = f'../Outputs/stabilize_{ID1}_{ID2}.avi'
+EXTRACTED_PATH = f'../Outputs/extracted_{ID1}_{ID2}.mp4'
+BINARY_PATH = f'../Outputs/binary_{ID1}_{ID2}.avi'
 ALPHA_PATH = f'../Outputs/alpha_{ID1}_{ID2}.avi'
 MATTED_PATH = f'../Outputs/matted_{ID1}_{ID2}.avi'
 OUTPUT_PATH = f'../Outputs/OUTPUT_{ID1}_{ID2}.avi'
@@ -41,10 +37,10 @@ M = 10000  # number of points in Gaussian window
 START_ROWS = 70
 END_ROWS = 30
 START_COLS = 25
-END_COLS = 25
-INDEX_TO_ADD_CROP = -1  # original 15
+END_COLS = 75
+INDEX_TO_ADD_CROP = -1
 CROP_FROM_START = 1
-START_COLS_NEXT = 200
+START_COLS_NEXT = 75
 
 # Background Subtraction Parameters
 
@@ -61,7 +57,6 @@ SKIN_HUE_threshold = 15
 SKIN_VALUE_threshold = 179
 VALUE_NOISE_THRESHOLD = 190
 TRAIN_ITER = 8
-
 
 # Image matting
 Rho_first_frame = 50
