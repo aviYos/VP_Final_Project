@@ -58,8 +58,8 @@ class image_matting:
 
     @staticmethod
     def create_foreground_background_pixels_map(binary_frame):
-        foreground_logical_matrix = (binary_frame > 150).astype(np.uint8)
-        background_logical_matrix = (binary_frame <= 150).astype(np.uint8)
+        foreground_logical_matrix = (binary_frame > 200).astype(np.uint8)
+        background_logical_matrix = (binary_frame <= 200).astype(np.uint8)
         return foreground_logical_matrix, background_logical_matrix
 
     def load_background_image(self):
@@ -97,7 +97,7 @@ class image_matting:
                                P_F_given_c=None, P_B_given_c=None, is_first_frame=False):
         x_grid = np.linspace(0, 255, 256)
 
-        if is_first_frame:
+        """if is_first_frame:
             kde_foreground = gaussian_kde(value_channel[np.where(foreground_logical_matrix == 1)],bw_method='silverman')
             kde_foreground_pdf = kde_foreground.evaluate(x_grid)
 
@@ -107,6 +107,18 @@ class image_matting:
             # probabilties of background and foreground
             P_F_given_c = kde_foreground_pdf / (kde_foreground_pdf + kde_bg_pdf)
             P_B_given_c = kde_bg_pdf / (kde_foreground_pdf + kde_bg_pdf)
+        """
+
+        kde_foreground = gaussian_kde(value_channel[np.where(foreground_logical_matrix == 1)],bw_method='silverman')
+        kde_foreground_pdf = kde_foreground.evaluate(x_grid)
+
+        kde_bg = gaussian_kde(value_channel[np.where(background_logical_matrix == 1)], bw_method='silverman')
+        kde_bg_pdf = kde_bg.evaluate(x_grid)
+
+        # probabilties of background and foreground
+        P_F_given_c = kde_foreground_pdf / (kde_foreground_pdf + kde_bg_pdf)
+        P_B_given_c = kde_bg_pdf / (kde_foreground_pdf + kde_bg_pdf)
+
 
         # probabilities map of background and foreground
         foreground_probability_map = P_F_given_c[value_channel]
@@ -119,9 +131,8 @@ class image_matting:
 
     @staticmethod
     def create_delta(Vf):
-        se1 = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-        BWerode = cv2.morphologyEx(Vf, cv2.MORPH_ERODE, se1)
-        delta = (255 * (np.abs(BWerode - Vf) > 0)).astype('uint8')
+        BWerode = cv2.morphologyEx(Vf, cv2.MORPH_ERODE, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)))
+        delta = (255 * (np.abs(BWerode - Vf) > 0)).astype(np.uint8)
         return delta
 
     @staticmethod
@@ -153,7 +164,6 @@ class image_matting:
         Vf, Vb = self.create_Vf_and_Vb(foreground_distance_map, background_distance_map, current_shape)
 
         delta = self.create_delta(Vf)
-        # union of euclidean balls with radius rho
         narrow_band = cv2.morphologyEx(delta, cv2.MORPH_DILATE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
         trimap = np.zeros(foreground_distance_map.shape)
         trimap[(Vf == 255) & (narrow_band == 0)] = 1
@@ -231,10 +241,10 @@ class image_matting:
 
         return P_F_given_c, P_B_given_c
 
-    def create_matted_and_alpha_video(self, P_F_given_c, P_B_given_c):
+    def create_matted_and_alpha_video(self):
 
         # loop for creating following frames for matted vid #
-        for i in range(self.number_of_frames - 1):
+        for i in range(self.number_of_frames):
             _, extracted_frame = self.extracted_video_cap.read()
             if extracted_frame is None:
                 break
@@ -251,11 +261,13 @@ class image_matting:
             if not binary_frame.shape[0]:
                 continue
 
-            value_channel = cv2.split(cv2.cvtColor(extracted_frame, cv2.COLOR_BGR2HSV))[2]
+            _, _, value_channel = cv2.split(cv2.cvtColor(extracted_frame, cv2.COLOR_BGR2HSV))
             value_channel = project_utils.slice_frame_from_bounding_rect(value_channel, bound_rect)
 
             foreground_logical_matrix, background_logical_matrix = self.create_foreground_background_pixels_map(
                 binary_frame)
+
+            P_F_given_c,P_B_given_c = None,None
 
             foreground_probability_map, background_probability_map, normalized_foreground_probability_map, \
             normalized_background_probability_map, _, _ = self.create_probability_map(
@@ -265,6 +277,7 @@ class image_matting:
             fg_prob_grad = np.sqrt(
                 (cv2.Sobel(normalized_foreground_probability_map, cv2.CV_64F, 1, 0, ksize=5)) ** 2 + (
                     cv2.Sobel(normalized_foreground_probability_map, cv2.CV_64F, 0, 1, ksize=5)) ** 2)
+
             fg_prob_grad = self.normalize_frame(fg_prob_grad)
 
             # binary frame to seeds conversion #
@@ -315,9 +328,11 @@ class image_matting:
 
         self.create_video_writers()
 
-        P_F_given_c, P_B_given_c = self.handle_first_frame()
+        #P_F_given_c, P_B_given_c = self.handle_first_frame()
 
-        self.create_matted_and_alpha_video(P_F_given_c, P_B_given_c)
+        #self.create_matted_and_alpha_video(P_F_given_c, P_B_given_c)
+
+        self.create_matted_and_alpha_video()
 
         self.close_all_videos()
 
