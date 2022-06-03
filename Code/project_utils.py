@@ -36,15 +36,16 @@ def slice_frame_from_bounding_rect(frame, bound_rect):
 
 # function that adds a submatrix define by bounding rect values to bigger image
 def insert_submatrix_from_bounding_rect(big, bound_rect, small):
-     big[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]] = small
-     return big
+    big[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]] = small
+    return big
 
 
 # function that writes stack of frames to video
 def write_frames_to_video(video_full_path, video_fps, frames_to_save, frame_size):
     try:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        video_Writer_handle = cv2.VideoWriter(video_full_path, fourcc, int(video_fps), (int(frame_size[0]), int(frame_size[1])))
+        video_Writer_handle = cv2.VideoWriter(video_full_path, fourcc, int(video_fps),
+                                              (int(frame_size[0]), int(frame_size[1])))
         for frame in frames_to_save:
             video_Writer_handle.write(frame)
         video_Writer_handle.release()
@@ -104,3 +105,11 @@ def split_bounding_rect(union_masks):
     low_part = slice_frame_from_bounding_rect(bounded_mask, low_part_rect)
 
     return top_part_rect, middle_part_rect, low_part_rect, top_part, middle_part, low_part, bounded_mask, bounding_rect
+
+
+def normalize_frame(frame):
+    try:
+        normalized_frame = (1. * frame - np.amin(frame)) / (np.amax(frame) - np.amin(frame)) * 255
+        return normalized_frame
+    except Exception as e:
+        print(e)

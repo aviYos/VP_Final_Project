@@ -1,7 +1,7 @@
 import project_constants
 import time
 from feature_point_gaussian_stabilization import stabilize_video_with_gaussian
-from background_subtraction import background_subtractor
+from background_subtraction_2 import background_subtractor
 from image_matting import image_matting
 from tracking import tracking
 import project_utils

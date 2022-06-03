@@ -2,7 +2,9 @@ import cv2
 import numpy as np
 import project_constants
 import project_utils
+from image_matting import image_matting as matting_module
 import matplotlib.pyplot as plt
+import GeodisTK
 
 
 class background_subtractor:
@@ -29,25 +31,65 @@ class background_subtractor:
         mask[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]] = 1
         return mask.astype(np.uint8)
 
+    def filter_noise_with_kde(self, binary_frame, full_size_value_channel, P_F_given_c, P_B_given_c, extracted):
+
+        _, _, extracted_value = cv2.split(cv2.cvtColor(extracted, cv2.COLOR_BGR2HSV))
+        bound_rect = cv2.boundingRect(binary_frame)
+        bounded_binary_frame = project_utils.slice_frame_from_bounding_rect(binary_frame, bound_rect)
+        value_channel = project_utils.slice_frame_from_bounding_rect(extracted_value, bound_rect)
+        _, _, foreground_mask, background_mask = \
+            matting_module.create_foreground_background_pixels_map(binary_frame)
+
+        foreground_binary, _, bounded_foreground_mask, bounded_background_mask = \
+            matting_module.create_foreground_background_pixels_map(bounded_binary_frame)
+
+        binary_frame_fg = cv2.morphologyEx(foreground_binary, cv2.MORPH_ERODE,
+                                           cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 5)).T, iterations=2)
+        binary_frame_bg = cv2.morphologyEx(foreground_binary, cv2.MORPH_DILATE,
+                                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)), iterations=6)
+        binary_frame_bg = np.bitwise_not(binary_frame_bg)
+
+        normalized_foreground_probability_map, normalized_background_probability_map, P_F_given_c, P_B_given_c = \
+            matting_module.create_probability_map(
+                value_channel, P_F_given_c,
+                P_B_given_c,
+                full_size_value_channel,
+                background_mask,
+                foreground_mask)
+
+        foreground_distance_map, background_distance_map = \
+            matting_module.create_distance_map_from_probability_maps(binary_frame_fg, binary_frame_bg,
+                                                                     normalized_foreground_probability_map,
+                                                                     normalized_background_probability_map)
+
+        return P_F_given_c, P_B_given_c
+
     def create_knn_subtractor_mask_for_frame(self, foreground_mask):
         try:
-            _, knn_mask = cv2.threshold(foreground_mask, 200, 255, cv2.THRESH_BINARY)  # shadow as background
-
-            h, w = knn_mask.shape
-
+            h, w = foreground_mask.shape
+            knn_mask = foreground_mask.copy()
+            knn_mask[knn_mask < 255] = 0
             knn_mask[:int(np.floor(h / 2)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(h / 2)), :], cv2.MORPH_OPEN,
                                                                   cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
                                                                   iterations=1)
 
-            knn_mask[:int(np.floor(h / 2)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(h / 2)), :], cv2.MORPH_CLOSE,
-                                                                  cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
-                                                                  iterations=5)
-
             knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :],
                                                                       cv2.MORPH_CLOSE,
                                                                       cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
-                                                                                                (6, 6)),
-                                                                      iterations=1)
+                                                                                                (2, 7)),
+                                                                     iterations=3)
+
+            knn_mask = self.get_largest_connected_shape_in_mask(knn_mask)
+
+            knn_mask[:int(np.floor(h / 2)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(h / 2)), :], cv2.MORPH_CLOSE,
+                                                                  cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+                                                                  iterations=3)
+
+            #knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :],
+            #                                                          cv2.MORPH_CLOSE,
+            #                                                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
+            #                                                                                   (3, 3)),
+            #                                                         iterations=3)
 
             knn_mask = self.get_largest_connected_shape_in_mask(knn_mask)
             return knn_mask
@@ -81,10 +123,10 @@ class background_subtractor:
                 masks_union)
 
             top_bound_rect, middle_bound_rect, down_bound_rect, top_mask, middle_mask, down_mask, \
-                bound_rect_mask, bound_rect = project_utils.split_bounding_rect(masks_union)
+            bound_rect_mask, bound_rect = project_utils.split_bounding_rect(masks_union)
 
             top_mask = cv2.morphologyEx(top_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7)),
-                                        iterations=7)
+                                        iterations=2)
 
             middle_mask = cv2.morphologyEx(middle_mask, cv2.MORPH_CLOSE,
                                            cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
@@ -117,7 +159,7 @@ class background_subtractor:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
 
     def train_background_subtractor_knn(self):
-        T = 7
+        T = 8
         all_hsv_frames = []
         try:
             self.logger.debug(' training knn subtractor on stabilized video')
@@ -133,16 +175,19 @@ class background_subtractor:
                     if frame is None:
                         break
                     else:
-                        frame = cv2.GaussianBlur(frame, (31, 31), cv2.BORDER_REFLECT_101)
+                        #frame = cv2.GaussianBlur(frame, (31,31),cv2.BORDER_REFLECT_101)
+                        pass
 
                     frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+                    frame = cv2.medianBlur(frame, 3)
                     if not i:
                         all_hsv_frames.append(frame_hsv)
 
                     _, sat_channel, value_channel = cv2.split(frame_hsv)
 
                     self.all_frames_Sat_channel_values[frame_index, :, :] = sat_channel
-                    self.bg_sub_masks[frame_index, :, :] = self.knn_subtractor.apply(frame_hsv[:, :, 1:])
+                    self.bg_sub_masks[frame_index, :, :] = self.knn_subtractor.apply(frame)
+
                 self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
             hsv_median_frame = np.median(all_hsv_frames, axis=0).astype(dtype=np.uint8)
@@ -153,28 +198,44 @@ class background_subtractor:
 
     def new_median_filter(self, median_frame_hsv, hsv):
         try:
+
             dframe = cv2.absdiff(hsv, median_frame_hsv)
 
             _, dframe_sat = cv2.threshold(dframe[:, :, 1], 40, 255, cv2.THRESH_BINARY)
 
             dframe_sat = self.get_largest_connected_shape_in_mask(dframe_sat)
 
-            dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_OPEN,
-                                          cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
-                                          iterations=1)
+            h,w = dframe_sat.shape
+
+            dframe_sat[:int(np.floor(h / 2)), : ] = cv2.morphologyEx(dframe_sat[:int(np.floor(h / 2)), : ], cv2.MORPH_OPEN,
+                                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+                                          iterations=4)
+
+            dframe_sat[int(np.floor(h / 2)):, :] = cv2.morphologyEx(dframe_sat[int(np.floor(h / 2)): , :], cv2.MORPH_OPEN,
+                                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+                                          iterations=2)
+
+            dframe_sat[int(np.floor(h / 2)): , :] = cv2.morphologyEx(dframe_sat[int(np.floor(h / 2)): , :], cv2.MORPH_CLOSE,
+                                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4)),
+                                          iterations=3)
 
             dframe_sat = self.get_largest_connected_shape_in_mask(dframe_sat)
 
-            _, dframe_val = cv2.threshold(dframe[:, :, 2], 40, 255, cv2.THRESH_BINARY)
+            _, dframe_val = cv2.threshold(dframe[:, :, 2], 35, 255, cv2.THRESH_BINARY)
 
             dframe_val = cv2.morphologyEx(dframe_val, cv2.MORPH_OPEN,
-                                          cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
-                                          iterations=1)
+                                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+                                          iterations=4)
+
+            dframe_val = cv2.morphologyEx(dframe_val, cv2.MORPH_CLOSE,
+                                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4)),
+                                          iterations=4)
 
             dframe_val = self.get_largest_connected_shape_in_mask(dframe_val)
 
             median_mask = np.zeros(dframe_sat.shape)
-            median_mask[np.where(np.logical_and(dframe_sat > 0, dframe_val > 0))] = 255
+            # median_mask[np.where(np.logical_and(dframe_sat > 0, dframe_val > 0))] = 255
+            median_mask[np.where(dframe_sat > 0)] = 255
             median_mask = median_mask.astype(np.uint8)
             final_median_mask = self.get_largest_connected_shape_in_mask(median_mask)
 
@@ -204,6 +265,8 @@ class background_subtractor:
 
             self.logger.debug('looping over all video frames and running background subtraction')
 
+            P_F_given_c, P_B_given_c = None, None
+
             for frame_index in range(self.number_of_frames):
 
                 self.logger.debug('running background subtraction on frame number ' + str(frame_index))
@@ -215,6 +278,7 @@ class background_subtractor:
                 self.logger.debug('Transforming frame number ' + str(frame_index) + ' to HSV')
 
                 frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+                _, _, value_channel = cv2.split(frame_hsv)
 
                 self.logger.debug('Creating median mask for frame number ' + str(frame_index))
 
@@ -229,13 +293,20 @@ class background_subtractor:
 
                 final_mask = self.union_masks(median_filter_mask, knn_mask)
 
+                extracted = cv2.bitwise_and(frame, frame, mask=final_mask.astype(np.uint8))
+
+                """
+                P_F_given_c, P_B_given_c, self.filter_noise_with_kde(final_mask, value_channel, P_F_given_c,
+                                                                     P_B_given_c, extracted)
+                """
+
                 self.logger.debug('writing frame number ' + str(frame_index) + ' to binary video')
 
                 vid_writer_binary.write(final_mask)
 
                 self.logger.debug('writing  frame number ' + str(frame_index) + ' to extracted video')
 
-                vid_writer_extracted.write(cv2.bitwise_and(frame, frame, mask=final_mask.astype(np.uint8)))
+                vid_writer_extracted.write(extracted)
 
                 self.last_frame = frame_hsv
 

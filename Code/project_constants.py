@@ -12,18 +12,19 @@ resize_factor = 2.5
 # File names
 GER_NAME = '../Temp/Final_Project_Logger.log'
 INPUT_VIDEO_PATH = '../Inputs/INPUT.mp4'
-STABILIZE_PATH = f'../Outputs/stabilize_{ID1}_{ID2}.avi'
-EXTRACTED_PATH = f'../Outputs/extracted_{ID1}_{ID2}.mp4'
-BINARY_PATH = f'../Outputs/binary_{ID1}_{ID2}.avi'
+#STABILIZE_PATH = f'../Outputs/stabilize_{ID1}_{ID2}.avi'
+#EXTRACTED_PATH = f'../Outputs/extracted_{ID1}_{ID2}.mp4'
+#BINARY_PATH = f'../Outputs/binary_{ID1}_{ID2}.avi'
 ALPHA_PATH = f'../Outputs/alpha_{ID1}_{ID2}.avi'
 MATTED_PATH = f'../Outputs/matted_{ID1}_{ID2}.avi'
 OUTPUT_PATH = f'../Outputs/OUTPUT_{ID1}_{ID2}.avi'
 LOGGER_NAME = '../Outputs/timing.json'
 TRACKING_LOGGER = '../Outputs/tracking.json'
 STABILIZED_VIDEO_PATH = '../Inputs/stabilize_315488171_314756297.avi'
-BACKGROUND_SCRIBLE_PATH = r'../Temp/bg_scribbles.tiff'
-FOREGROUND_SCRIBLE_PATH = r'../Temp/fg_scribbles.tiff'
 BACKGROUND_IMAGE_PATH = '../Inputs/background.jpg'
+STABILIZE_PATH = f'../Outputs/stabilize.avi'
+BINARY_PATH = f'../Outputs/binary.avi'
+EXTRACTED_PATH = f'../Outputs/extracted.avi'
 
 # Stabilization Parameters
 
