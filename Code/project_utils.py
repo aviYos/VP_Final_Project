@@ -93,10 +93,10 @@ def split_bounding_rect(union_masks):
     top_part_rect = (0, 0, w, int(np.floor(h / 3) + 1))
 
     # calc middle bounding rect
-    middle_part_rect = (0, int(np.floor(h / 3)) - 1, w, int(np.floor(h / 3)))
+    middle_part_rect = (0, int(np.floor(h / 3)) + 1, w, int(np.floor(h / 3)))
 
     # calc low bounding rect
-    low_part_rect = (0, int(np.floor(2 * h / 3 - 1)), w, int(np.floor(h / 3)))
+    low_part_rect = (0, int(np.floor(2 * h / 3)), w, int(np.floor(h / 3) + 1))
 
     top_part = slice_frame_from_bounding_rect(bounded_mask, top_part_rect)
 

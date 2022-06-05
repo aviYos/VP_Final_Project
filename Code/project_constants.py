@@ -6,7 +6,7 @@ ID1 = '315488171'
 ID2 = '314756297'
 
 # General
-resize_factor = 2.5
+resize_factor = 1
 
 
 # File names
@@ -44,22 +44,7 @@ CROP_FROM_START = 1
 START_COLS_NEXT = 75
 
 # Background Subtraction Parameters
-
-Background_Subtraction_Alpha = 0.05
-Background_Subtraction_T = 0.9
-Background_Subtraction_Theta = 2.5
-Background_Subtraction_Mask_Threshold = 175
-NUMBER_OF_COLOR_CHANNELS = 3
-MEDIAN_FILTER_DENSE = 55
-MEDIAN_FILTER_THRESHOLD = 50
-SKIN_SAT_THRESHOLD_LOW = 70
-SKIN_SAT_THRESHOLD_UPPER = 140
-SKIN_HUE_threshold = 15
-SKIN_VALUE_threshold = 179
-VALUE_NOISE_THRESHOLD = 190
 TRAIN_ITER = 8
 
 # Image matting
-Rho_first_frame = 50
-Rho_second_frame = 50
-distance_map_radius = 1
+distance_map_radius = 0.3

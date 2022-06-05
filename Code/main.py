@@ -1,8 +1,8 @@
 import project_constants
 import time
 from feature_point_gaussian_stabilization import stabilize_video_with_gaussian
-from background_subtraction_2 import background_subtractor
-from image_matting import image_matting
+from background_subtraction import background_subtractor
+from matting import matting
 from tracking import tracking
 import project_utils
 
@@ -46,7 +46,7 @@ def main():
                  project_constants.EXTRACTED_PATH)
     print('Matting extracted video to background image:')
     matting_start_time = time.time()
-    mat = image_matting()
+    mat = matting()
     mat.main_image_matting_module()
     matting_end_time = time.time()
     matting_time = matting_end_time - start_time
