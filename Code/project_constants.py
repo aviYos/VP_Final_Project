@@ -62,4 +62,4 @@ TRAIN_ITER = 8
 # Image matting
 Rho_first_frame = 50
 Rho_second_frame = 50
-distance_map_radius = 0.5
+distance_map_radius = 1

@@ -68,28 +68,26 @@ class background_subtractor:
         try:
             h, w = foreground_mask.shape
             knn_mask = foreground_mask.copy()
+
+            #knn_mask[knn_mask[int(h / 2): , :] > 100] = 255
+            # knn_mask[knn_mask[:int(h / 2) + 1:, :] < 200] = 0
+
             knn_mask[knn_mask < 255] = 0
             knn_mask[:int(np.floor(h / 2)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(h / 2)), :], cv2.MORPH_OPEN,
                                                                   cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
                                                                   iterations=1)
 
-            knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :],
+
+            knn_mask[:int(np.floor(2*h / 5)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(2*h / 5)), :], cv2.MORPH_CLOSE,
+                                                                  cv2.getStructuringElement(cv2.MORPH_RECT, (1, 20)),
+                                                                  iterations=2)
+
+
+            knn_mask[int(np.floor(1 * h / 2)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(1 * h / 2)):, :],
                                                                       cv2.MORPH_CLOSE,
                                                                       cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
-                                                                                                (2, 7)),
-                                                                     iterations=3)
-
-            knn_mask = self.get_largest_connected_shape_in_mask(knn_mask)
-
-            knn_mask[:int(np.floor(h / 2)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(h / 2)), :], cv2.MORPH_CLOSE,
-                                                                  cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
-                                                                  iterations=3)
-
-            #knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :],
-            #                                                          cv2.MORPH_CLOSE,
-            #                                                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
-            #                                                                                   (3, 3)),
-            #                                                         iterations=3)
+                                                                                                (1, 30)),
+                                                                     iterations=2)
 
             knn_mask = self.get_largest_connected_shape_in_mask(knn_mask)
             return knn_mask
@@ -127,6 +125,10 @@ class background_subtractor:
 
             top_mask = cv2.morphologyEx(top_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7)),
                                         iterations=2)
+
+            middle_mask = cv2.morphologyEx(middle_mask, cv2.MORPH_OPEN,
+                                           cv2.getStructuringElement(cv2.MORPH_RECT, (2, 9)),
+                                           iterations=1)
 
             middle_mask = cv2.morphologyEx(middle_mask, cv2.MORPH_CLOSE,
                                            cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
@@ -221,7 +223,7 @@ class background_subtractor:
 
             dframe_sat = self.get_largest_connected_shape_in_mask(dframe_sat)
 
-            _, dframe_val = cv2.threshold(dframe[:, :, 2], 35, 255, cv2.THRESH_BINARY)
+            _, dframe_val = cv2.threshold(dframe[:, :, 2], 25, 255, cv2.THRESH_BINARY)
 
             dframe_val = cv2.morphologyEx(dframe_val, cv2.MORPH_OPEN,
                                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
@@ -235,7 +237,7 @@ class background_subtractor:
 
             median_mask = np.zeros(dframe_sat.shape)
             # median_mask[np.where(np.logical_and(dframe_sat > 0, dframe_val > 0))] = 255
-            median_mask[np.where(dframe_sat > 0)] = 255
+            median_mask[np.where(dframe_val > 0)] = 255
             median_mask = median_mask.astype(np.uint8)
             final_median_mask = self.get_largest_connected_shape_in_mask(median_mask)
 

@@ -112,42 +112,27 @@ class image_matting:
         return normalized_foreground_probability_map, normalized_background_probability_map, P_F_given_c, P_B_given_c
 
     @staticmethod
-    def create_delta(Vf):
+    def create_narrow_band(Vf):
         foreground_mask_eroded = cv2.morphologyEx(Vf, cv2.MORPH_ERODE,
                                                   cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)))
-        delta = (255 * (np.abs(foreground_mask_eroded - Vf) > 0)).astype(np.uint8)
-        return delta
+        narrow_band = (255 * (np.abs(foreground_mask_eroded - Vf) > 0)).astype(np.uint8)
+        narrow_band = cv2.morphologyEx(narrow_band, cv2.MORPH_DILATE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+        return narrow_band
 
     @staticmethod
-    def create_Vf_and_Vb(foreground_distance_map, background_distance_map, current_shape):
-        Vf = np.zeros(current_shape)
-        Vb = np.zeros(current_shape)
-        Vf[(foreground_distance_map - background_distance_map) <= 0] = 255
-        Vb[(background_distance_map - foreground_distance_map) <= 0] = 255
-        return Vf, Vb
-
-    def create_trimap_first_frame(self, foreground_distance_map, background_distance_map):
-
-        current_shape = (self.frame_height, self.frame_width)
-        sure_foreground, sure_background = self.create_Vf_and_Vb(foreground_distance_map, background_distance_map, current_shape)
-
-        delta = self.create_delta(sure_foreground)
-
-        # trimap
-        trimap = np.zeros((self.frame_height, self.frame_width))
-        narrow_band = cv2.morphologyEx(delta, cv2.MORPH_DILATE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
-        trimap[(sure_foreground == 255) & (narrow_band == 0)] = 1
-        trimap[(sure_background == 255) & (narrow_band == 0)] = 0
-        trimap[narrow_band == 255] = 0.5  # undecided region
-        return trimap
+    def create_sure_foreground_and_sure_background(foreground_distance_map, background_distance_map, current_shape):
+        sure_foreground = np.zeros(current_shape)
+        sure_background = np.zeros(current_shape)
+        sure_foreground[(foreground_distance_map - background_distance_map) <= 0] = 255
+        sure_background[(background_distance_map - foreground_distance_map) <= 0] = 255
+        return sure_foreground, sure_background
 
     def create_trimap(self, foreground_distance_map, background_distance_map):
 
         current_shape = foreground_distance_map.shape
-        Vf, Vb = self.create_Vf_and_Vb(foreground_distance_map, background_distance_map, current_shape)
+        Vf, Vb = self.create_sure_foreground_and_sure_background(foreground_distance_map, background_distance_map, current_shape)
 
-        delta = self.create_delta(Vf)
-        narrow_band = cv2.morphologyEx(delta, cv2.MORPH_DILATE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+        narrow_band = self.create_narrow_band(Vf)
         trimap = np.zeros(foreground_distance_map.shape)
         trimap[(Vf == 255) & (narrow_band == 0)] = 1
         trimap[(Vb == 255) & (narrow_band == 0)] = 0
