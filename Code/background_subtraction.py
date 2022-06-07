@@ -8,7 +8,8 @@ class background_subtractor:
 
     def __init__(self):
         """background_subtractor Init"""
-        self.knn_subtractor = cv2.createBackgroundSubtractorKNN()
+        self.bgr_knn_subtractor = cv2.createBackgroundSubtractorKNN()
+        self.hsv_knn_subtractor = cv2.createBackgroundSubtractorKNN()
         self.video_cap = cv2.VideoCapture(project_constants.STABILIZE_PATH)
         self.logger = project_utils.create_general_logger()
         self.number_of_frames = int(self.video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -16,7 +17,8 @@ class background_subtractor:
         self.frame_width = int(self.video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.kernel = None
         self.fps = project_utils.get_video_fps(self.video_cap)
-        self.bg_sub_masks = np.zeros((self.number_of_frames, self.frame_height, self.frame_width)).astype(np.uint8)
+        self.BGR_subtractor = np.zeros((self.number_of_frames, self.frame_height, self.frame_width)).astype(np.uint8)
+        self.HSV_subtractor = np.zeros((self.number_of_frames, self.frame_height, self.frame_width)).astype(np.uint8)
 
     @staticmethod
     def get_bounding_rect_pixels(frame, bound_rect):
@@ -24,40 +26,6 @@ class background_subtractor:
         mask = np.zeros(frame.shape[0:2])
         mask[bound_rect[1]:bound_rect[1] + bound_rect[3], bound_rect[0]:bound_rect[0] + bound_rect[2]] = 1
         return mask.astype(np.uint8)
-
-    """ def filter_noise_with_kde(self, binary_frame, full_size_value_channel, P_F_given_c, P_B_given_c, extracted):
-    Use kde of the foreground  to filter noise
-        _, _, extracted_value = cv2.split(cv2.cvtColor(extracted, cv2.COLOR_BGR2HSV))
-        bound_rect = cv2.boundingRect(binary_frame)
-        bounded_binary_frame = project_utils.slice_frame_from_bounding_rect(binary_frame, bound_rect)
-        value_channel = project_utils.slice_frame_from_bounding_rect(extracted_value, bound_rect)
-        _, _, foreground_mask, background_mask = \
-            matting_module.create_foreground_background_pixels_map(binary_frame)
-
-        foreground_binary, _, bounded_foreground_mask, bounded_background_mask = \
-            matting_module.create_foreground_background_pixels_map(bounded_binary_frame)
-
-        binary_frame_fg = cv2.morphologyEx(foreground_binary, cv2.MORPH_ERODE,
-                                           cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 5)).T, iterations=2)
-        binary_frame_bg = cv2.morphologyEx(foreground_binary, cv2.MORPH_DILATE,
-                                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)), iterations=6)
-        binary_frame_bg = np.bitwise_not(binary_frame_bg)
-
-        normalized_foreground_probability_map, normalized_background_probability_map, P_F_given_c, P_B_given_c = \
-            matting_module.create_probability_map(
-                value_channel, P_F_given_c,
-                P_B_given_c,
-                full_size_value_channel,
-                background_mask,
-                foreground_mask)
-
-        foreground_distance_map, background_distance_map = \
-            matting_module.create_distance_map_from_probability_maps(binary_frame_fg, binary_frame_bg,
-                                                                     normalized_foreground_probability_map,
-                                                                     normalized_background_probability_map)
-
-        return P_F_given_c, P_B_given_c
-    """
 
     def create_knn_subtractor_mask_for_frame(self, foreground_mask):
         """ Applying some noise cleaning tricks on the knn subtractor"""
@@ -67,12 +35,12 @@ class background_subtractor:
             knn_mask = foreground_mask.copy()
 
             # shadow value is 127 so new label shadow as background
-            knn_mask[knn_mask < 255] = 0
+            knn_mask[knn_mask < 200] = 0
 
-            # clear small noises from the frame expect the legs
+            # clear small noises from the frame except the legs
             knn_mask[:int(np.floor(2 * h / 3)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(2 * h / 3)), :],
                                                                       cv2.MORPH_OPEN,
-                                                                      cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)),
+                                                                      cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
                                                                       iterations=1)
 
             # close holes in the head
@@ -86,10 +54,17 @@ class background_subtractor:
             knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :],
                                                                       cv2.MORPH_CLOSE,
                                                                       cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
-                                                                                                (1, 20)),
+                                                                                                (5, 15)),
+                                                                      iterations=2)
+
+            knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :],
+                                                                      cv2.MORPH_OPEN,
+                                                                      cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
+                                                                                                (5, 15)),
                                                                       iterations=3)
 
             # remove small noise shapes
+
             knn_mask = self.get_largest_connected_shape_in_mask(knn_mask)
 
             return knn_mask
@@ -182,10 +157,6 @@ class background_subtractor:
         all_hsv_frames = []
         try:
             self.logger.debug(' training knn subtractor on stabilized video')
-
-            # init matrix for knn background subtractor results
-            self.bg_sub_masks = np.zeros((self.number_of_frames, self.frame_height, self.frame_width)).astype(np.uint8)
-
             for i in range(T):
                 for frame_index in range(self.number_of_frames):
                     _, frame = self.video_cap.read()
@@ -196,17 +167,47 @@ class background_subtractor:
 
                     # blur frame to remove noise
                     frame = cv2.medianBlur(frame, 3)
+                    frame_hsv = cv2.medianBlur(frame_hsv, 3)
+
                     if not i:
                         all_hsv_frames.append(frame_hsv)
 
                     # apply knn background subtractor
-                    self.bg_sub_masks[frame_index, :, :] = self.knn_subtractor.apply(frame)
+                    self.BGR_subtractor[frame_index, :, :] = self.bgr_knn_subtractor.apply(frame)
+                    self.HSV_subtractor[frame_index, :, :] = self.hsv_knn_subtractor.apply(frame_hsv)
+
                 # move video pointer to the beginning
                 self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
             # return median frame for further use
             hsv_median_frame = np.median(all_hsv_frames, axis=0).astype(dtype=np.uint8)
             return hsv_median_frame
+
+        except Exception as e:
+            self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
+
+    def merge_bgr_with_hsv_subtractor(self, hsv_knn_mask, bgr_knn_mask):
+        """ merging bgr mask with hsv mask"""
+        try:
+
+            # our primary mask is the bgr mask
+
+            h, w = bgr_knn_mask.shape
+            main_mask = bgr_knn_mask.copy()
+
+            # shadow value is 127 - set shadow as background
+            main_mask[bgr_knn_mask < 200] = 0
+            main_mask[bgr_knn_mask > 200] = 1
+
+            hsv_knn_mask[hsv_knn_mask < 200] = 0
+            hsv_knn_mask[hsv_knn_mask > 200] = 1
+
+            # knn subtractor has problem in the legs part, so merge the masks over there
+            main_mask[int(np.floor(2 * h / 3)):, :] = main_mask[int(np.floor(2 * h / 3)):, :] | hsv_knn_mask[
+                                                                                        int(np.floor(2 * h / 3)):, :]
+            # mask values should be 0 or 255
+            main_mask[main_mask == 1] = 255
+            return main_mask.astype(np.uint8)
 
         except Exception as e:
             self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
@@ -319,14 +320,23 @@ class background_subtractor:
                 self.logger.debug('Creating knn foreground mask for frame number ' + str(frame_index))
 
                 # remove noises from the knn mask
-                foreground_mask_knn = self.bg_sub_masks[frame_index, :, :]
-                knn_mask = self.create_knn_subtractor_mask_for_frame(foreground_mask_knn)
+                foreground_mask_bgr_knn = self.BGR_subtractor[frame_index, :, :]
+                foreground_mask_hsv_knn = self.HSV_subtractor[frame_index, :, :]
+
+                # at the end of the video the hsv bg subtractor is noisy - so we use only bgr bg subtractor
+                if frame_index <= 0.9 * self.number_of_frames:
+                    raw_united_knn_mask = self.merge_bgr_with_hsv_subtractor(foreground_mask_hsv_knn,
+                                                                             foreground_mask_bgr_knn)
+                else:
+                    raw_united_knn_mask = foreground_mask_bgr_knn
+
+                united_knn_mask = self.create_knn_subtractor_mask_for_frame(raw_united_knn_mask)
 
                 self.logger.debug('Creating union mask from all masks for frame number ' + str(frame_index))
 
                 # merge the knn and the median mask to one mask
 
-                final_mask = self.union_masks(median_filter_mask, knn_mask)
+                final_mask = self.union_masks(median_filter_mask, united_knn_mask)
 
                 extracted = cv2.bitwise_and(frame, frame, mask=final_mask.astype(np.uint8))
 
@@ -366,8 +376,3 @@ class background_subtractor:
                 vid_writer_extracted.release()
             if self.video_cap.isOpened():
                 self.video_cap.release()
-
-
-if __name__ == "__main__":
-    background_subtractor_handle = background_subtractor()
-    background_subtractor_handle.main_background_subtraction_module()

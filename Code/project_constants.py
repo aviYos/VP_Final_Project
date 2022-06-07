@@ -47,4 +47,4 @@ START_COLS_NEXT = 75
 TRAIN_ITER = 8
 
 # Image matting
-distance_map_radius = 0.3
+distance_map_radius = 0.7

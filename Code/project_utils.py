@@ -70,10 +70,6 @@ def load_entire_video(cap, color_space='bgr'):
             break
         if color_space == 'bgr':
             frames.append(curr)
-        elif color_space == 'yuv':
-            frames.append(cv2.cvtColor(curr, cv2.COLOR_BGR2YUV))
-        elif color_space == 'bw':
-            frames.append(cv2.cvtColor(curr, cv2.COLOR_BGR2GRAY))
         else:
             frames.append(cv2.cvtColor(curr, cv2.COLOR_BGR2HSV))
         continue
@@ -85,7 +81,6 @@ def load_entire_video(cap, color_space='bgr'):
 def split_bounding_rect(union_masks):
     bounding_rect = cv2.boundingRect(union_masks)
     bounded_mask = slice_frame_from_bounding_rect(union_masks, bounding_rect)
-    height, width = bounded_mask.shape
 
     x, y, w, h = bounding_rect[0], bounding_rect[1], bounding_rect[2], bounding_rect[3]
 

@@ -316,16 +316,6 @@ class matting:
 
         self.create_video_writers()
 
-        # P_F_given_c, P_B_given_c = self.handle_first_frame()
-
-        # self.create_matted_and_alpha_video(P_F_given_c, P_B_given_c)
-
         self.create_matted_and_alpha_video()
 
         self.close_all_videos()
-
-
-if __name__ == '__main__':
-    # matting_module()
-    mat = matting()
-    mat.main_image_matting_module()
