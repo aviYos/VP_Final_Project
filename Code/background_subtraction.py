@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import project_constants
 import project_utils
-
+import matplotlib.pyplot as plt
 
 class background_subtractor:
 
@@ -38,7 +38,7 @@ class background_subtractor:
             knn_mask[knn_mask < 200] = 0
 
             # clear small noises from the frame except the legs
-            knn_mask[:int(np.floor(2 * h / 3)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(2 * h / 3)), :],
+            knn_mask[:int(np.floor(3 * h / 6)), :] = cv2.morphologyEx(knn_mask[:int(np.floor(3 * h / 6)), :],
                                                                       cv2.MORPH_OPEN,
                                                                       cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
                                                                       iterations=1)
@@ -53,8 +53,8 @@ class background_subtractor:
             # close holes in the legs
             knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :],
                                                                       cv2.MORPH_CLOSE,
-                                                                      cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
-                                                                                                (5, 15)),
+                                                                      cv2.getStructuringElement(cv2.MORPH_RECT,
+                                                                                                (5, 25)),
                                                                       iterations=2)
 
             knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :],
@@ -107,7 +107,7 @@ class background_subtractor:
 
             # split masks to sub masks
             top_bound_rect, middle_bound_rect, down_bound_rect, top_mask, middle_mask, down_mask, \
-                bound_rect_mask, bound_rect = project_utils.split_bounding_rect(masks_union)
+            bound_rect_mask, bound_rect = project_utils.split_bounding_rect(masks_union)
 
             # erode and dilate for noise cleaning
             top_mask = cv2.morphologyEx(top_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7)),
@@ -122,8 +122,8 @@ class background_subtractor:
                                            iterations=1)
 
             down_mask = cv2.morphologyEx(down_mask, cv2.MORPH_CLOSE,
-                                         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (6, 6)),
-                                         iterations=3)
+                                         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+                                         iterations=1)
 
             # merge sub masks
             final_mask = self.create_final_mask_from_sub_masks(masks_union, top_bound_rect,
@@ -140,7 +140,7 @@ class background_subtractor:
     def get_largest_connected_shape_in_mask(self, mask):
         """ return only the biggest mask except the background"""
         try:
-            number_of_labels, component_labels, stats, _ = cv2.connectedComponentsWithStats(mask)
+            number_of_labels, component_labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=4)
             sizes = stats[range(number_of_labels), cv2.CC_STAT_AREA]
             # - remove black background part
             sizes[np.argmax(sizes)] = -1
@@ -174,7 +174,7 @@ class background_subtractor:
 
                     # apply knn background subtractor
                     self.BGR_subtractor[frame_index, :, :] = self.bgr_knn_subtractor.apply(frame)
-                    self.HSV_subtractor[frame_index, :, :] = self.hsv_knn_subtractor.apply(frame_hsv)
+                    self.HSV_subtractor[frame_index, :, :] = self.hsv_knn_subtractor.apply(frame_hsv[:, :, 1:])
 
                 # move video pointer to the beginning
                 self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -204,7 +204,8 @@ class background_subtractor:
 
             # knn subtractor has problem in the legs part, so merge the masks over there
             main_mask[int(np.floor(2 * h / 3)):, :] = main_mask[int(np.floor(2 * h / 3)):, :] | hsv_knn_mask[
-                                                                                        int(np.floor(2 * h / 3)):, :]
+                                                                                                int(np.floor(
+                                                                                                    2 * h / 3)):, :]
             # mask values should be 0 or 255
             main_mask[main_mask == 1] = 255
             return main_mask.astype(np.uint8)
@@ -220,7 +221,7 @@ class background_subtractor:
             dframe = cv2.absdiff(hsv, median_frame_hsv)
 
             # transform the difference to binary mask
-            _, dframe_val = cv2.threshold(dframe[:, :, 1], 40, 255, cv2.THRESH_BINARY)
+            _, dframe_val = cv2.threshold(dframe[:, :, 1], 25, 255, cv2.THRESH_BINARY)
 
             # remove small noise shapes
             dframe_val = self.get_largest_connected_shape_in_mask(dframe_val)
@@ -238,19 +239,19 @@ class background_subtractor:
                                                                     cv2.MORPH_OPEN,
                                                                     cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
                                                                                               (3, 3)),
-                                                                    iterations=2)
+                                                                    iterations=1)
 
             dframe_val[int(np.floor(h / 2)):, :] = cv2.morphologyEx(dframe_val[int(np.floor(h / 2)):, :],
                                                                     cv2.MORPH_CLOSE,
                                                                     cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
                                                                                               (4, 4)),
-                                                                    iterations=3)
+                                                                    iterations=2)
 
             # remove small noise shapes  again
             dframe_val = self.get_largest_connected_shape_in_mask(dframe_val)
 
             # erode and dilate for noise cleaning
-            _, dframe_sat = cv2.threshold(dframe[:, :, 2], 40, 255, cv2.THRESH_BINARY)
+            _, dframe_sat = cv2.threshold(dframe[:, :, 2], 25, 255, cv2.THRESH_BINARY)
 
             dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_OPEN,
                                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
@@ -324,7 +325,7 @@ class background_subtractor:
                 foreground_mask_hsv_knn = self.HSV_subtractor[frame_index, :, :]
 
                 # at the end of the video the hsv bg subtractor is noisy - so we use only bgr bg subtractor
-                if frame_index <= 0.9 * self.number_of_frames:
+                if frame_index <= 1 * self.number_of_frames:
                     raw_united_knn_mask = self.merge_bgr_with_hsv_subtractor(foreground_mask_hsv_knn,
                                                                              foreground_mask_bgr_knn)
                 else:
@@ -376,3 +377,8 @@ class background_subtractor:
                 vid_writer_extracted.release()
             if self.video_cap.isOpened():
                 self.video_cap.release()
+
+
+if __name__ == '__main__':
+    a = background_subtractor()
+    a.main_background_subtraction_module()

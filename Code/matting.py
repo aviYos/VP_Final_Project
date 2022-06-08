@@ -319,3 +319,8 @@ class matting:
         self.create_matted_and_alpha_video()
 
         self.close_all_videos()
+
+
+if __name__ == '__main__':
+    a = matting()
+    a.main_image_matting_module()
