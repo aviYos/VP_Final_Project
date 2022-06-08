@@ -254,7 +254,7 @@ class matting:
                     self.create_probability_map(
                         value_channel, P_F_given_c,
                         P_B_given_c,
-                        full_size_value_channel,
+                        full_frame_value,
                         dilated_background,
                         eroded_foreground)
 
@@ -272,17 +272,18 @@ class matting:
                 # create trimap
                 trimap = self.create_trimap(foreground_distance_map, background_distance_map)
 
-                trimap_mask = ((trimap == 0.5) & (foreground_distance_map != 0) & (background_distance_map != 0))
+                trimap_indexes_in_frame = (trimap == 0.5) & (foreground_distance_map != 0) \
+                                          & (background_distance_map != 0)
 
                 # create Wf and Wb
                 current_size = foreground_distance_map.shape
-                Wf, Wb = self.create_Wf_Wb(trimap_mask, foreground_distance_map,
+                Wf, Wb = self.create_Wf_Wb(trimap_indexes_in_frame, foreground_distance_map,
                                            background_distance_map,
                                            normalized_foreground_probability_map,
                                            normalized_background_probability_map,
                                            current_size)
                 # create alpha
-                alpha = self.create_alpha_frame_from_trimap(trimap, trimap_mask, Wf, Wb, foreground_distance_map,
+                alpha = self.create_alpha_frame_from_trimap(trimap, trimap_indexes_in_frame, Wf, Wb, foreground_distance_map,
                                                             background_distance_map, bound_rect)
 
                 alpha_original_size = cv2.resize((project_utils.normalize_frame(alpha)).astype(np.uint8),
