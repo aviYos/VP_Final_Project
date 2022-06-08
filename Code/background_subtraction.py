@@ -53,8 +53,8 @@ class background_subtractor:
             # close holes in the legs
             knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :],
                                                                       cv2.MORPH_CLOSE,
-                                                                      cv2.getStructuringElement(cv2.MORPH_RECT,
-                                                                                                (5, 25)),
+                                                                      cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
+                                                                                                (5, 15)),
                                                                       iterations=2)
 
             knn_mask[int(np.floor(2 * h / 3)):, :] = cv2.morphologyEx(knn_mask[int(np.floor(2 * h / 3)):, :],
@@ -233,13 +233,13 @@ class background_subtractor:
                                                                     cv2.MORPH_OPEN,
                                                                     cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
                                                                                               (3, 3)),
-                                                                    iterations=4)
+                                                                    iterations=3)
 
             dframe_val[int(np.floor(h / 2)):, :] = cv2.morphologyEx(dframe_val[int(np.floor(h / 2)):, :],
                                                                     cv2.MORPH_OPEN,
                                                                     cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
                                                                                               (3, 3)),
-                                                                    iterations=1)
+                                                                    iterations=3)
 
             dframe_val[int(np.floor(h / 2)):, :] = cv2.morphologyEx(dframe_val[int(np.floor(h / 2)):, :],
                                                                     cv2.MORPH_CLOSE,
@@ -251,7 +251,7 @@ class background_subtractor:
             dframe_val = self.get_largest_connected_shape_in_mask(dframe_val)
 
             # erode and dilate for noise cleaning
-            _, dframe_sat = cv2.threshold(dframe[:, :, 2], 25, 255, cv2.THRESH_BINARY)
+            _, dframe_sat = cv2.threshold(dframe[:, :, 2], 45, 255, cv2.THRESH_BINARY)
 
             dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_OPEN,
                                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
@@ -259,7 +259,7 @@ class background_subtractor:
 
             dframe_sat = cv2.morphologyEx(dframe_sat, cv2.MORPH_CLOSE,
                                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4)),
-                                          iterations=4)
+                                          iterations=1)
             # remove small noise shapes
             dframe_sat = self.get_largest_connected_shape_in_mask(dframe_sat)
 
