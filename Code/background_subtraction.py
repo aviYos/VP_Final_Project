@@ -368,7 +368,7 @@ class background_subtractor:
 
         except Exception as e:
             # write error to log and safe quit
-            self.logger.error('Error in background subtraction: ' + str(e), exc_info=True)
+            self.logger.error('Error in background subtraction: ' + str(e))
         finally:
             # close all video handles
             if 'vid_writer_binary' in locals() and vid_writer_binary.isOpened():
