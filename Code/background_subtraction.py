@@ -166,15 +166,16 @@ class background_subtractor:
                     frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
                     # blur frame to remove noise
-                    frame = cv2.medianBlur(frame, 3)
-                    frame_hsv_blurred = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+                    #frame = cv2.medianBlur(frame, 3)
+                    #frame_hsv_blurred = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
 
                     if not i:
                         all_hsv_frames.append(frame_hsv)
 
                     # apply knn background subtractor
                     self.BGR_subtractor[frame_index, :, :] = self.bgr_knn_subtractor.apply(frame)
-                    self.HSV_subtractor[frame_index, :, :] = self.hsv_knn_subtractor.apply(frame_hsv_blurred[:, :, 1:])
+                    self.HSV_subtractor[frame_index, :, :] = self.hsv_knn_subtractor.apply(frame_hsv[:, :, 1:])
 
                 # move video pointer to the beginning
                 self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
