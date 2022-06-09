@@ -140,7 +140,7 @@ class background_subtractor:
     def get_largest_connected_shape_in_mask(self, mask):
         """ return only the biggest mask except the background"""
         try:
-            number_of_labels, component_labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=4)
+            number_of_labels, component_labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
             sizes = stats[range(number_of_labels), cv2.CC_STAT_AREA]
             # - remove black background part
             sizes[np.argmax(sizes)] = -1
@@ -167,14 +167,14 @@ class background_subtractor:
 
                     # blur frame to remove noise
                     frame = cv2.medianBlur(frame, 3)
-                    frame_hsv = cv2.medianBlur(frame_hsv, 3)
+                    frame_hsv_blurred = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
                     if not i:
                         all_hsv_frames.append(frame_hsv)
 
                     # apply knn background subtractor
                     self.BGR_subtractor[frame_index, :, :] = self.bgr_knn_subtractor.apply(frame)
-                    self.HSV_subtractor[frame_index, :, :] = self.hsv_knn_subtractor.apply(frame_hsv[:, :, 1:])
+                    self.HSV_subtractor[frame_index, :, :] = self.hsv_knn_subtractor.apply(frame_hsv_blurred[:, :, 1:])
 
                 # move video pointer to the beginning
                 self.video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
